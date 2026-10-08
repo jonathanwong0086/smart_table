@@ -3,14 +3,15 @@
 .gitignore
 .gitattributes
 
-# Python
-__pycache__
-*.py[cod]
+# Python（**/ 前缀才能匹配子目录，根级模式匹配不到）
+**/__pycache__
+**/*.py[cod]
 *$py.class
 *.so
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
