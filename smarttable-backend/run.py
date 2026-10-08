@@ -256,7 +256,8 @@ def run_migrations():
                 # 版本，与迁移最终态等价且 schema 更完整、可重复执行。
                 print('[Migrate] 检测到全新数据库，按当前模型建表并标记最新版本...')
                 db.create_all()
-                stamp(directory=str(migrations_dir))
+                # 多层迁移目录会产生多个分支 head，stamp heads 将所有 head 一并标记
+                stamp(directory=str(migrations_dir), revision='heads')
                 repair_schema_columns()
                 print('[Migrate] ✅ 数据库初始化完成')
                 return
@@ -266,7 +267,9 @@ def run_migrations():
                 stamp(directory=str(migrations_dir), revision=BASELINE_REVISION)
                 print(f'[Migrate] ✅ 已标记当前版本为 {BASELINE_REVISION}')
 
-            upgrade(directory=str(migrations_dir))
+            # 多层迁移目录会产生多个分支 head（各产品版本层各一个），
+            # 必须用 heads 而非 head，否则多 head 场景下 Alembic 会报错
+            upgrade(directory=str(migrations_dir), revision='heads')
             # 自修复：补齐因历史迁移被跳过而缺失的模型列（如 dashboard_shares.title）
             repair_schema_columns()
             print('[Migrate] ✅ 数据库迁移完成')

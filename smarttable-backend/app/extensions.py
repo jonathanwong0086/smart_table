@@ -22,6 +22,38 @@ db = SQLAlchemy()
 # 数据库迁移扩展
 migrate = Migrate()
 
+# 分层迁移目录（各产品版本层级独立维护迁移，互不干扰）：
+# - versions/      基础层（feat-plugin）
+# - versions_fa/   打印/移动端/高级权限层（feat/field-auth-base）
+# - versions_am/   应用模式层（feat/app-base-mode）
+# - versions_ap/   审批流层（feat/approval-flows）
+# 低版本分支只存在部分目录，不存在的目录会被 Alembic 自动忽略。
+_MIGRATION_LAYER_DIRS = ('versions', 'versions_fa', 'versions_am', 'versions_ap')
+
+
+@migrate.configure
+def _configure_migration_version_locations(config):
+    """
+    将各层迁移目录聚合进 Alembic 的 version_locations。
+
+    flask_migrate 构建的 Config 会读取迁移目录下的 alembic.ini，
+    本回调在其后执行并以「基于 script_location 的路径」覆盖配置，
+    避免相对路径受进程工作目录（开发/Docker/PyInstaller）影响。
+    所有 flask_migrate 调用（run.py 迁移、flask db 命令）均经过此处。
+    """
+    script_dir = config.get_main_option('script_location')
+    if not script_dir:
+        return config
+    locations = [
+        os.path.join(script_dir, layer_dir)
+        for layer_dir in _MIGRATION_LAYER_DIRS
+        if os.path.isdir(os.path.join(script_dir, layer_dir))
+    ]
+    if locations:
+        config.set_main_option('version_path_separator', 'os')
+        config.set_main_option('version_locations', os.pathsep.join(locations))
+    return config
+
 # JWT 认证扩展
 jwt = JWTManager()
 
