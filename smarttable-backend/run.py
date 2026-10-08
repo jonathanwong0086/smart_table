@@ -20,9 +20,12 @@ from pathlib import Path
 # - 开发模式：以项目根目录（run.py 的父目录的父目录）为基准
 #
 # 加载优先级（从高到低）：
-#   1. {base_dir}/config/.env  （用户配置，最高优先级）
+#   0. 进程环境变量（docker run -e / 系统环境变量，始终最高——.env 文件不会覆盖已注入的变量）
+#   1. {base_dir}/config/.env  （用户配置，文件中最高优先级）
 #   2. {base_dir}/.env         （项目根目录 / EXE 根目录）
 #   3. smarttable-backend/.env  （开发环境，最低优先级）
+# 命中第一个存在的文件即停止（break），加载时 override=False：
+# 仅填充尚未定义的变量，保证外部注入（如 docker run -e DATABASE_URL=...）不被文件默认值覆盖
 _load_env_base = (
     Path(sys.executable).parent
     if getattr(sys, 'frozen', False)
@@ -36,7 +39,7 @@ for _env_path in [
     Path(__file__).parent / '.env',
 ]:
     if _env_path.exists():
-        load_dotenv(_env_path, override=True)
+        load_dotenv(_env_path, override=False)
         _env_loaded = True
         _load_env_result = _env_path
         break

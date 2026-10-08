@@ -121,6 +121,13 @@ COPY --from=backend-builder /root/.local /root/.local
 # 复制后端代码
 COPY smarttable-backend/ ./
 
+# 默认启动配置（参照 build.py 的 config/.env 优先、.env.example 回退逻辑）：
+# 将 .env.example 内置为 /app/.env，避免裸容器启动缺少参数报错。
+# 优先级：docker run -e 注入 > /config/.env（挂载） > /app/.env（本默认配置）
+# 注意：.env.example 的 FLASK_ENV=development 不会生效——run.py 以 override=False 加载，
+#       Dockerfile ENV FLASK_ENV=production 已注入进程环境，优先于文件值
+COPY smarttable-backend/.env.example /app/.env
+
 # 复制宿主版本信息（插件引擎兼容校验 engines.smarttable 需要）
 COPY version.json /app/version.json
 

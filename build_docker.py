@@ -295,6 +295,15 @@ def check_prerequisites():
     if not (PROJECT_ROOT / 'Dockerfile').exists():
         errors.append('Dockerfile 不存在')
 
+    # 默认启动配置检查（参照 build.py 的 .env.example 回退逻辑）：
+    # Dockerfile 会把 .env.example 内置为 /app/.env，作为容器默认启动参数，
+    # 避免裸 docker run 缺少 SECRET_KEY 等参数时启动报错
+    env_example = BACKEND_DIR / '.env.example'
+    if not env_example.exists():
+        errors.append(f'默认配置模板不存在: {env_example}（镜像需要它生成容器默认 .env）')
+    else:
+        log(f'  ✓ 默认配置模板存在: {env_example.relative_to(PROJECT_ROOT)}', 'SUCCESS')
+
     log(f'  ✓ 项目结构完整', 'SUCCESS')
 
     if errors:
