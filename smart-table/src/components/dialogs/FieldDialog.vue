@@ -104,7 +104,7 @@ const newField = ref<{
   // 数值字段配置
   precision: number;
   // 数值字段展示格式配置
-  format: "number" | "currency" | "percent" | "text";
+  format: "number" | "currency" | "percent" | "text" | "date" | "datetime";
   currencySymbol: string;
   prefix: string;
   suffix: string;
@@ -255,6 +255,11 @@ const dateFormatOptions = [
   { label: "MMDD", value: "MMDD" },
   { label: "MM-DD", value: "MM-DD" },
 ];
+
+// 显示格式为文本/日期/日期时间时，隐藏数值类配置项（小数位数/前后缀/千分位）
+const hideNumericStyleOptions = computed(() =>
+  ["text", "date", "datetime"].includes(newField.value.format),
+);
 
 const selectOptions = ref<{ id: string; name: string; color: string }[]>([]);
 const newOptionName = ref("");
@@ -577,7 +582,7 @@ function openEditField(field: FieldEntity) {
     description: field.description || "",
     defaultValue: dateDefaultValue,
     precision: (field.options?.precision as number) ?? 0,
-    format: ((field.options?.format as "number" | "currency" | "percent" | "text") ?? "number"),
+    format: ((field.options?.format as "number" | "currency" | "percent" | "text" | "date" | "datetime") ?? "number"),
     currencySymbol: (field.options?.currencySymbol as string) ?? "¥",
     prefix: (field.options?.prefix as string) ?? "",
     suffix: (field.options?.suffix as string) ?? "",
@@ -843,8 +848,8 @@ async function createField() {
     if (newField.value.type === FieldType.FORMULA) {
       options.formula = newField.value.formula;
       options.format = newField.value.format;
-      // 文本格式无需小数位数、前后缀、货币符号、千分位等数值相关配置
-      if (newField.value.format !== "text") {
+      // 文本/日期/日期时间格式无需小数位数、前后缀、货币符号、千分位等数值相关配置
+      if (!["text", "date", "datetime"].includes(newField.value.format)) {
         options.precision = newField.value.precision ?? 0;
         options.currencySymbol = newField.value.currencySymbol;
         options.prefix = newField.value.prefix || undefined;
@@ -1037,8 +1042,8 @@ async function updateField() {
     if (newField.value.type === FieldType.FORMULA) {
       options.formula = newField.value.formula;
       options.format = newField.value.format;
-      // 文本格式无需小数位数、前后缀、货币符号、千分位等数值相关配置
-      if (newField.value.format !== "text") {
+      // 文本/日期/日期时间格式无需小数位数、前后缀、货币符号、千分位等数值相关配置
+      if (!["text", "date", "datetime"].includes(newField.value.format)) {
         options.precision = newField.value.precision ?? 0;
         options.currencySymbol = newField.value.currencySymbol;
         options.prefix = newField.value.prefix || undefined;
@@ -1908,13 +1913,15 @@ async function toggleFieldVisibility(
               <ElOption :label="t('field.numberFormat')" value="number" />
               <ElOption :label="t('field.currencyFormat')" value="currency" />
               <ElOption :label="t('field.percentFormat')" value="percent" />
+              <ElOption :label="t('field.formatDate')" value="date" />
+              <ElOption :label="t('field.formatDateTime')" value="datetime" />
               <ElOption :label="t('field.textFormat')" value="text" />
             </ElSelect>
           </ElFormItem>
 
-          <!-- 小数位数（文本格式不展示） -->
+          <!-- 小数位数（文本/日期/日期时间格式不展示） -->
           <ElFormItem
-            v-if="newField.format !== 'text'"
+            v-if="!hideNumericStyleOptions"
             :label="t('field.precision')">
             <div class="precision-config">
               <ElSlider
@@ -1942,9 +1949,9 @@ async function toggleFieldVisibility(
               :placeholder="t('field.currencySymbolPlaceholder')" />
           </ElFormItem>
 
-          <!-- 自定义前缀文字（货币格式使用货币符号，故不在此配置；文本格式不展示） -->
+          <!-- 自定义前缀文字（货币格式使用货币符号，故不在此配置；文本/日期/日期时间格式不展示） -->
           <ElFormItem
-            v-if="newField.format !== 'currency' && newField.format !== 'text'"
+            v-if="newField.format !== 'currency' && !hideNumericStyleOptions"
             :label="t('field.numberPrefix')">
             <ElInput
               v-model="newField.prefix"
@@ -1964,9 +1971,9 @@ async function toggleFieldVisibility(
               :placeholder="t('field.numberSuffixHint')" />
           </ElFormItem>
 
-          <!-- 千分位分隔符（文本格式不展示） -->
+          <!-- 千分位分隔符（文本/日期/日期时间格式不展示） -->
           <ElFormItem
-            v-if="newField.format !== 'text'"
+            v-if="!hideNumericStyleOptions"
             :label="t('field.thousandsSeparator')">
             <ElSwitch v-model="newField.thousandsSeparator" />
             <div class="field-hint">{{ t('field.thousandsSeparatorHint') }}</div>

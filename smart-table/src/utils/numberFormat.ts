@@ -1,6 +1,7 @@
 export interface NumberFormatOptions {
   precision?: number;
-  format?: "number" | "currency" | "percent" | "text";
+  // date/datetime 仅为公式字段格式透传兼容；数值字段自身不会使用该格式
+  format?: "number" | "currency" | "percent" | "text" | "date" | "datetime";
   currencySymbol?: string;
   prefix?: string;
   suffix?: string;

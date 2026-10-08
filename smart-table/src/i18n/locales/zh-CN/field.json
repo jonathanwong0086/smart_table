@@ -331,6 +331,8 @@
   "currencySymbolLabel": "货币符号",
   "currencySymbolPlaceholder": "如 ¥、$",
   "textFormat": "文本",
+  "formatDate": "日期",
+  "formatDateTime": "日期时间",
   "numberPrefix": "前缀文字",
   "numberSuffix": "后缀文字",
   "numberPrefixHint": "在数值前显示固定文字，如 $、¥",

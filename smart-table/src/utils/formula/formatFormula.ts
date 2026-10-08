@@ -14,6 +14,61 @@ import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine"
 import { formatDate, formatDateTime } from "@/utils/timezone";
 import type { FieldEntity, RecordEntity } from "@/db/schema";
 
+/**
+ * 按公式字段配置的"显示格式"格式化日期/日期时间值。
+ *
+ * 仅当字段配置 format 为 "date" / "datetime" 时生效，返回格式化后的字符串；
+ * 其余情况返回 null，由调用方回退到原有展示逻辑（自动类型推断/数值格式化）。
+ *
+ * 兼容值形态：
+ * - 毫秒时间戳（前端 FormulaEngine 计算结果）与秒级时间戳（10 位数字，与日期筛选解析规则一致）；
+ * - 纯数字字符串：10 位视为秒级，其余按毫秒解析；
+ * - 日期/日期时间字符串（后端 computed_values 的 ISO 串、YYYY-MM-DD HH:mm:ss 等）；
+ * - Date 对象。
+ *
+ * 边界处理：空值返回空串；#ERROR 计算错误原样透传；无法解析的日期
+ * 统一返回 "-"，与系统日期展示约定（formatDate/formatDateTime）保持一致。
+ */
+export function formatFormulaDateByConfig(
+  value: unknown,
+  fieldOptions: { format?: unknown } | undefined | null,
+): string | null {
+  const format = fieldOptions?.format;
+  if (format !== "date" && format !== "datetime") return null;
+
+  if (value === null || value === undefined || value === "") return "";
+
+  // 10 位数字视为秒级时间戳，其余按毫秒处理
+  const toMillis = (n: number) => (n >= 1e9 && n < 1e10 ? n * 1000 : n);
+
+  if (value instanceof Date) {
+    return format === "date"
+      ? formatDate(value)
+      : formatDateTime(value);
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    const ts = toMillis(value);
+    return format === "date" ? formatDate(ts) : formatDateTime(ts);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    // 计算错误信息原样透传，避免被日期格式化吞掉诊断内容
+    if (trimmed.startsWith("#ERROR")) return trimmed;
+    if (/^\d+$/.test(trimmed)) {
+      const ts = toMillis(Number(trimmed));
+      return format === "date" ? formatDate(ts) : formatDateTime(ts);
+    }
+    return format === "date" ? formatDate(trimmed) : formatDateTime(trimmed);
+  }
+
+  // 其它类型（布尔等）原样返回
+  return String(value);
+}
+
 export function calculateFormulaDisplay(
   field: FieldEntity,
   record: RecordEntity,
@@ -46,7 +101,11 @@ export function calculateFormulaDisplay(
     }
   }
 
-  // 3. 格式化显示（与表格视图一致）
+  // 3. 配置了日期/日期时间显示格式时，严格按配置格式化
+  const dateFormatted = formatFormulaDateByConfig(precomputed, fieldOptions);
+  if (dateFormatted !== null) return dateFormatted;
+
+  // 4. 格式化显示（与表格视图一致）
   if (typeof precomputed === "string") {
     const dateMatch = precomputed.match(/^\d{4}-\d{2}-\d{2}/);
     if (dateMatch) {

@@ -22,6 +22,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { generateId } from "@/utils/id";
 import dayjs from "dayjs";
 import { FormulaEngine } from "@/utils/formula/engine";
+import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { formatNumberField, createNumberInputFormatter, createNumberInputParser, getNumberFieldPrefix, getNumberFieldSuffix, type NumberFormatOptions } from "@/utils/numberFormat";
 import { formatDateTime, formatDate } from "@/utils/timezone";
 import {
@@ -210,6 +211,10 @@ const calculateFormulaValue = (
     if (result === "#ERROR") {
       return t("record.calcError");
     }
+
+    // 配置了日期/日期时间显示格式时，严格按配置格式化
+    const dateFormatted = formatFormulaDateByConfig(result, field.options);
+    if (dateFormatted !== null) return dateFormatted;
 
     // 根据公式类型决定格式化方式
     const resultType = FormulaEngine.inferResultType(formula);

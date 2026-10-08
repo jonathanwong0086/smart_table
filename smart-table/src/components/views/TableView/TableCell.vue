@@ -10,6 +10,7 @@ import DateInput from "@/components/fields/DateInput.vue";
 import MemberDisplay from "@/components/common/MemberDisplay.vue";
 import MemberSelect from "@/components/common/MemberSelect.vue";
 import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine";
+import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { isFieldRequired, isValueEmpty } from "@/utils/validation";
 import { useTableStore } from "@/stores/tableStore";
 import { ElMessage, ElTooltip } from "element-plus";
@@ -295,6 +296,9 @@ const calculateFormula = (): string => {
     const precomputed = computedValues[fieldName];
     
     if (precomputed !== null && precomputed !== undefined) {
+      // 配置了日期/日期时间显示格式时，严格按配置格式化
+      const dateFormatted = formatFormulaDateByConfig(precomputed, fieldOptions.value);
+      if (dateFormatted !== null) return dateFormatted;
       // 如果后端返回的是 datetime 字符串，格式化显示
       if (typeof precomputed === 'string') {
         // 尝试解析为日期
@@ -341,6 +345,10 @@ const calculateFormula = (): string => {
     if (result === "#ERROR") {
       return t("view.calcError");
     }
+
+    // 配置了日期/日期时间显示格式时，严格按配置格式化
+    const dateFormatted = formatFormulaDateByConfig(result, fieldOptions.value);
+    if (dateFormatted !== null) return dateFormatted;
 
     // 数字格式化
     if (typeof result === "number") {

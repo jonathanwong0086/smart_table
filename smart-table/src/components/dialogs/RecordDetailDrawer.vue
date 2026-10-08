@@ -29,6 +29,7 @@ import type { RecordEntity, FieldEntity } from "@/db/schema";
 import { FieldType, getFieldTypeIconComponent } from "@/types/fields";
 import MemberSelect from "@/components/common/MemberSelect.vue";
 import { FormulaEngine } from "@/utils/formula/engine";
+import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { formatNumberField, createNumberInputFormatter, createNumberInputParser, getNumberFieldPrefix, getNumberFieldSuffix } from "@/utils/numberFormat";
 import {
   validateRequiredFields,
@@ -524,6 +525,10 @@ const calculateFormulaValue = (
 
     const formulaEngine = new FormulaEngine(props.fields);
     const result = formulaEngine.calculate(record, formula);
+
+    // 配置了日期/日期时间显示格式时，严格按配置格式化
+    const dateFormatted = formatFormulaDateByConfig(result, field.options);
+    if (dateFormatted !== null) return dateFormatted;
 
     if (typeof result === "number") {
       // 根据公式类型决定格式化方式

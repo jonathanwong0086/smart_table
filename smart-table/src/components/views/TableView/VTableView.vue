@@ -33,6 +33,7 @@ import { formatDateTime, formatDate } from "@/utils/timezone";
 import { useUserCacheStore } from "@/stores/userCacheStore";
 import { validateFieldFormat } from "@/utils/validation";
 import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine";
+import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { formatNumberField } from "@/utils/numberFormat";
 import { linkApiService } from "@/services/api/linkApiService";
 import { viewApiService } from "@/services/api/viewApiService";
@@ -3298,6 +3299,9 @@ const computeFormulaCellValue = (
   if (computedValues && typeof computedValues === 'object') {
     const precomputed = computedValues[field.name];
     if (precomputed !== null && precomputed !== undefined) {
+      // 配置了日期/日期时间显示格式时，严格按配置格式化
+      const dateFormatted = formatFormulaDateByConfig(precomputed, field.options);
+      if (dateFormatted !== null) return dateFormatted;
       if (typeof precomputed === 'number') {
         const resultType = FormulaEngine.inferResultType(formula);
         if (resultType === 'datetime') return formatDateTime(precomputed);
@@ -3320,6 +3324,9 @@ const computeFormulaCellValue = (
   try {
     const result = engine.calculate(record, formula);
     if (result === '#ERROR') return t('view.calcError');
+    // 配置了日期/日期时间显示格式时，严格按配置格式化
+    const dateFormatted = formatFormulaDateByConfig(result, field.options);
+    if (dateFormatted !== null) return dateFormatted;
     if (typeof result === 'number') {
       const resultType = FormulaEngine.inferResultType(formula);
       if (resultType === 'datetime') return formatDateTime(result);

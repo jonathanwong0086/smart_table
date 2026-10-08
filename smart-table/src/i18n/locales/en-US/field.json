@@ -331,6 +331,8 @@
   "currencySymbolLabel": "Currency Symbol",
   "currencySymbolPlaceholder": "e.g. ¥ or $",
   "textFormat": "Text",
+  "formatDate": "Date",
+  "formatDateTime": "Date & Time",
   "numberPrefix": "Prefix Text",
   "numberSuffix": "Suffix Text",
   "numberPrefixHint": "Fixed text shown before the number, e.g. $ or ¥",

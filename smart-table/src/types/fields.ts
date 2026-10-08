@@ -187,7 +187,8 @@ export interface FieldOptions {
   // 通用选项
   maxLength?: number;
   precision?: number;
-  format?: "number" | "currency" | "percent" | "text";
+  // 公式字段额外支持 date / datetime（日期/日期时间显示格式）
+  format?: "number" | "currency" | "percent" | "text" | "date" | "datetime";
   currencySymbol?: string;
   // 自定义前缀文字（货币格式下追加在货币符号之后；百分比格式下显示在 % 之前）
   prefix?: string;
