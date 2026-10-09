@@ -23,6 +23,7 @@ import os
 import sys
 import json
 import shutil
+import socket
 import argparse
 import time
 import platform
@@ -496,37 +497,73 @@ BASE_IMAGES = [
 ]
 
 
+def _inject_proxy_env():
+    """
+    为 imagetools registry 间复制注入代理环境变量。
+
+    `docker buildx imagetools create` 由 buildx CLI 直连源 registry（不走 daemon
+    的镜像加速配置）。国内直连 Docker Hub 常超时，Go 程序尊重标准代理环境变量，
+    故探测本机常见代理端口，可用则注入 HTTPS_PROXY/HTTP_PROXY（子进程继承）。
+    """
+    if os.environ.get('HTTPS_PROXY'):
+        return  # 用户已配置
+    for port in (7890, 7897, 10809, 1080):
+        try:
+            with socket.create_connection(('127.0.0.1', port), timeout=1):
+                os.environ['HTTPS_PROXY'] = f'http://127.0.0.1:{port}'
+                os.environ['HTTP_PROXY'] = f'http://127.0.0.1:{port}'
+                log(f'  检测到本地代理端口 {port}，已注入 HTTPS_PROXY '
+                    f'(imagetools 复制经代理访问 Docker Hub)', 'INFO')
+                return
+        except OSError:
+            continue
+
+
 def ensure_base_images(image_name):
     """
     准备基础镜像的 registry 中转。
     国内网络下 buildx (docker-container 驱动) 从 Docker Hub 拉基础镜像的
-    manifest/blob 极不稳定 (mirror 大 blob 下载 EOF、直连超时), 而宿主 daemon
-    拉取与推送阿里云 ACR 均稳定。将基础镜像 tag 到 {registry}/base 并推送,
-    构建时经 --build-arg 传入, buildkit 直接从 ACR 拉取。
+    manifest/blob 极不稳定 (mirror 大 blob 下载 EOF、直连超时), 故将基础镜像
+    中转到 {registry}/base, 构建时经 --build-arg 传入, buildkit 直接从 ACR 拉取。
+
+    关键: 必须用 `docker buildx imagetools create` 在 registry 之间原样复制
+    完整的多平台 manifest list (amd64+arm64)。禁止用 `docker pull + tag + push`
+    中转——宿主 daemon 只会拉取本机架构的单平台镜像 (Windows/Linux x64 为
+    amd64), 中转后 arm64 构建会基于 amd64 内容打上 arm64 标签, 产出
+    "manifest 标 arm64、内容为 amd64 二进制" 的损坏镜像, 在 ARM 设备上
+    运行报 exec format error。
+
+    来源顺序: 官方 Docker Hub → daocloud 镜像源 (国内稳定, 同样是完整
+    manifest list)。全部失败则回退官方镜像名直接构建。
     返回 {'NODE_IMAGE': ref, ...} 或 None (无 registry 前缀或中转失败时回退官方名)。
     """
     parts = image_name.split('/')
     if len(parts) < 2 or '.' not in parts[0]:
         return None  # 无 registry 前缀的本地镜像名, 无需中转
     base_repo = f'{parts[0]}/{parts[1]}/base'
-    log('准备基础镜像中转 (registry/base)...', 'INFO')
+    _inject_proxy_env()
+    log('准备基础镜像中转 (registry/base, imagetools 复制多平台 manifest)...', 'INFO')
     mapping = {}
     for arg_name, src, tag in BASE_IMAGES:
         ref = f'{base_repo}:{tag}'
-        try:
-            ins = run_command(['docker', 'image', 'inspect', src],
-                              capture=True, check=False)
-            if ins.returncode != 0:
-                log(f'  本地缺失 {src}，由 daemon 拉取 (走已配置的镜像加速)...', 'INFO')
-                run_command(['docker', 'pull', src], capture=True, check=True)
-            run_command(['docker', 'tag', src, ref], capture=True, check=True)
-            log(f'  推送中转镜像 {ref} ...', 'INFO')
-            run_command(['docker', 'push', ref], capture=True, check=True)
-            mapping[arg_name] = ref
-        except (SystemExit, Exception) as e:
-            log(f'  ⚠ 中转镜像 {ref} 准备失败: {e}', 'WARNING')
-            log('  将回退为直接使用官方基础镜像名构建', 'WARNING')
+        # 镜像源路径: 官方 library 镜像需补 library/ 前缀
+        mirror_src = f'docker.m.daocloud.io/library/{src}' if '/' not in src \
+            else f'docker.m.daocloud.io/{src}'
+        copied = False
+        for source in (src, mirror_src):
+            log(f'  复制多平台基础镜像 {source} -> {ref} ...', 'INFO')
+            r = run_command(['docker', 'buildx', 'imagetools', 'create',
+                             '-t', ref, source], capture=True, check=False)
+            if r.returncode == 0:
+                copied = True
+                log(f'  ✓ {ref} 就绪 (完整多平台 manifest list)', 'SUCCESS')
+                break
+            log(f'  ✗ 来源 {source} 复制失败', 'WARNING')
+        if not copied:
+            log(f'  ⚠ 中转镜像 {ref} 准备失败, 回退为直接使用官方基础镜像名构建',
+                'WARNING')
             return None
+        mapping[arg_name] = ref
     log('  基础镜像中转就绪', 'SUCCESS')
     return mapping
 
