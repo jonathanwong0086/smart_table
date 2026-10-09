@@ -35,6 +35,7 @@ import { validateFieldFormat } from "@/utils/validation";
 import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine";
 import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { formatNumberField } from "@/utils/numberFormat";
+import { getSystemFieldDisplayValue, getSystemFieldRawValue, isSystemValueType } from "@/utils/systemFields";
 import { linkApiService } from "@/services/api/linkApiService";
 import { viewApiService } from "@/services/api/viewApiService";
 import { recordApiService } from "@/services/api/recordApiService";
@@ -109,6 +110,10 @@ const userCacheStore = useUserCacheStore();
 const memberStore = useMemberStore();
 // 权限控制：字段管理（隐藏/编辑属性）需要管理员及以上角色
 const canManage = computed(() => memberStore.canManage);
+
+// 系统字段（创建人/更新人）用户 ID -> 名称解析
+const resolveSystemUserName = (userId: string): string =>
+  userCacheStore.getCachedUser(userId)?.name || userId;
 
 const tableContainerRef = ref<HTMLElement | null>(null);
 let tableInstance: ListTable | null = null;
@@ -3130,10 +3135,25 @@ const sortedRecords = computed(() => {
   const sorts = currentSorts.value;
   if (!sorts || sorts.length === 0) return records.value;
 
+  // 系统字段（创建人/创建时间/更新人/更新时间）排序取值来自记录元数据
+  const sortFieldTypes = new Map(
+    sorts.map((s) => {
+      const f = fields.value.find((sf) => sf.id === s.fieldId);
+      return [s.fieldId, f && isSystemValueType(f.type) ? f.type : null];
+    }),
+  );
+
   return [...records.value].sort((a, b) => {
     for (const sort of sorts) {
-      const aVal = a.values[sort.fieldId];
-      const bVal = b.values[sort.fieldId];
+      const systemType = sortFieldTypes.get(sort.fieldId);
+      const aVal =
+        systemType !== null && systemType !== undefined
+          ? getSystemFieldRawValue(a, systemType)
+          : a.values[sort.fieldId];
+      const bVal =
+        systemType !== null && systemType !== undefined
+          ? getSystemFieldRawValue(b, systemType)
+          : b.values[sort.fieldId];
 
       let comparison = 0;
       if (aVal === null || aVal === undefined) {
@@ -3445,6 +3465,13 @@ const transformRecords = (rawRecords: RecordEntity[]): any[] => {
           row[field.id] = rawVal;
           break;
         }
+        case FieldType.CREATED_BY:
+        case FieldType.CREATED_TIME:
+        case FieldType.UPDATED_BY:
+        case FieldType.UPDATED_TIME:
+          // 系统字段：直接读取记录元数据（records.created_by/updated_by/created_at/updated_at）
+          row[field.id] = getSystemFieldDisplayValue(record, field.type, resolveSystemUserName);
+          break;
         default:
           row[field.id] = rawVal;
       }
@@ -3558,6 +3585,13 @@ const transformTreeRecords = (records: any[], depth: number = 0): any[] => {
           row[field.id] = computeFormulaCellValue(record, field, formulaEngine);
           break;
         }
+        case FieldType.CREATED_BY:
+        case FieldType.CREATED_TIME:
+        case FieldType.UPDATED_BY:
+        case FieldType.UPDATED_TIME:
+          // 系统字段：直接读取记录元数据（records.created_by/updated_by/created_at/updated_at）
+          row[field.id] = getSystemFieldDisplayValue(record, field.type, resolveSystemUserName);
+          break;
         default: {
           row[field.id] = rawVal ?? '';
           break;
@@ -4553,6 +4587,14 @@ const transformSubTableRecords = (records: any[], targetFields: any[]): any[] =>
             transformed[field.id] = rawVal; break;
           }
           transformed[field.id] = rawVal;
+          break;
+        }
+        case FieldType.CREATED_BY:
+        case FieldType.CREATED_TIME:
+        case FieldType.UPDATED_BY:
+        case FieldType.UPDATED_TIME: {
+          // 系统字段：子表记录元数据可用时直接读取（与主表一致）
+          transformed[field.id] = getSystemFieldDisplayValue(row, field.type, resolveSystemUserName);
           break;
         }
         default:

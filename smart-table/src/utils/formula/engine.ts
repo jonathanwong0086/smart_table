@@ -1,6 +1,7 @@
 import type { FieldEntity, RecordEntity } from "@/db/schema";
 import { FieldType, type CellValue } from "@/types";
 import { formulaFunctions, matchesCriteria } from "./functions";
+import { getSystemFieldRawValue, isSystemValueType } from "@/utils/systemFields";
 import dayjs from "dayjs";
 import { t } from "@/i18n";
 
@@ -157,7 +158,12 @@ export class FormulaEngine {
         (f) => f.name.toLowerCase() === String(fieldName).trim().toLowerCase(),
       );
       if (!field) return "null";
-      const values = table.records.map((r) => r.values[field.id] ?? null);
+      // 系统字段（创建人/创建时间/更新人/更新时间）值不在 record.values，取自记录元数据
+      const values = table.records.map((r) =>
+        isSystemValueType(field.type)
+          ? getSystemFieldRawValue(r, field.type)
+          : (r.values[field.id] ?? null),
+      );
       return this.arrayToExpression(values, field);
     });
   }
@@ -198,7 +204,11 @@ export class FormulaEngine {
       if (!fieldId) return "null";
 
       const field = this.fields.get(fieldId);
-      const value = record.values[fieldId];
+      // 系统字段（创建人/创建时间/更新人/更新时间）值不在 record.values，取自记录元数据
+      const value =
+        field && isSystemValueType(field.type)
+          ? getSystemFieldRawValue(record, field.type)
+          : record.values[fieldId];
 
       return this.valueToExpression(value, field);
     });

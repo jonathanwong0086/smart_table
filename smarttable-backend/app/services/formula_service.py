@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from functools import lru_cache
 
 from app.extensions import db, cache
-from app.models.field import Field
+from app.models.field import Field, FieldType
 
 
 class FormulaError(Exception):
@@ -1811,6 +1811,54 @@ class FormulaService:
                 columns[f.name].append(values.get(field_key_by_name[f.name]))
         return columns
 
+    @staticmethod
+    def _datetime_to_millis(dt: Optional[datetime]) -> Optional[int]:
+        """datetime → 毫秒时间戳（与前端系统字段取值形态一致）；naive 视为 UTC"""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+
+    @classmethod
+    def _build_formula_context(
+        cls,
+        all_fields: List['Field'],
+        values: Dict[str, Any],
+        record: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        构建以字段名为 key 的公式上下文（公式引擎用字段名引用）
+
+        record.values 以 field_id 为键，须映射为字段名；系统维护字段
+        （创建人/创建时间/更新人/更新时间/最后修改人）的值不落 values，
+        从记录元数据补充注入，与前端取值形态一致：
+        用户字段为用户 ID 字符串，时间字段为毫秒时间戳。
+        """
+        field_id_to_name = {str(f.id): f.name for f in all_fields}
+
+        context: Dict[str, Any] = {}
+        for field_id, value in (values or {}).items():
+            field_name = field_id_to_name.get(str(field_id))
+            if field_name:
+                context[field_name] = value
+
+        if record is None:
+            return context
+
+        meta_by_type = {
+            FieldType.CREATED_BY.value: str(record.created_by) if record.created_by else None,
+            FieldType.UPDATED_BY.value: str(record.updated_by) if record.updated_by else None,
+            FieldType.LAST_MODIFIED_BY.value: str(record.updated_by) if record.updated_by else None,
+            FieldType.CREATED_TIME.value: cls._datetime_to_millis(record.created_at),
+            FieldType.UPDATED_TIME.value: cls._datetime_to_millis(record.updated_at),
+        }
+        for f in all_fields:
+            if f.type in meta_by_type:
+                context[f.name] = meta_by_type[f.type]
+
+        return context
+
     @classmethod
     def _extract_column_ref_table_names(cls, fields: List['Field']) -> Set[str]:
         """扫描公式字段中 [表].[字段] 引用的目标表名集合（表名小写）"""
@@ -1830,7 +1878,8 @@ class FormulaService:
         values: Dict[str, Any],
         user_id: str = None,
         formula_fields: List[Field] = None,
-        table_context: Optional[Dict[str, Dict[str, List[Any]]]] = None
+        table_context: Optional[Dict[str, Dict[str, List[Any]]]] = None,
+        record: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         计算记录中所有公式的值（任务 30.1）
@@ -1844,6 +1893,8 @@ class FormulaService:
             formula_fields: 可选的预查询公式字段列表，避免重复数据库查询
             table_context: 可选的整列引用数据上下文；未提供时若公式含
                           [表].[字段] 引用则自动查询本表全量数据构建
+            record: 可选的记录 ORM 对象；传入时公式可引用系统维护字段
+                   （创建人/创建时间/更新人/更新时间，值取自记录元数据）
 
         Returns:
             公式字段计算结果字典 {field_name: computed_value}
@@ -1869,16 +1920,10 @@ class FormulaService:
                 table_id, formula_fields
             )
 
-        # 获取表格所有字段，用于构建字段名到值的映射
+        # 获取表格所有字段，构建以字段名为 key 的上下文
+        # （公式引擎用字段名引用；系统维护字段从记录元数据补充）
         all_fields = Field.query.filter_by(table_id=table_id).all()
-        field_id_to_name = {str(f.id): f.name for f in all_fields}
-
-        # 构建以字段名为 key 的上下文（公式引擎用字段名引用）
-        context_by_name = {}
-        for field_id, value in values.items():
-            field_name = field_id_to_name.get(str(field_id))
-            if field_name:
-                context_by_name[field_name] = value
+        context_by_name = cls._build_formula_context(all_fields, values, record=record)
 
         results = {}
 
@@ -1976,6 +2021,9 @@ class FormulaService:
         errors = 0
         updated_fields = []
 
+        # 构建字段名上下文所需的全部字段（含系统字段元数据注入）
+        all_fields = Field.query.filter_by(table_id=table_id).all()
+
         offset = 0
         while offset < total_records:
             records = Record.query.filter_by(
@@ -1984,7 +2032,11 @@ class FormulaService:
             ).offset(offset).limit(batch_size).all()
 
             for record in records:
-                values = record.values or {}
+                # 以字段名为 key 的上下文（公式引擎用字段名引用；
+                # 系统维护字段从记录元数据补充）
+                context_by_name = cls._build_formula_context(
+                    all_fields, record.values or {}, record=record
+                )
 
                 for field in formula_fields:
                     formula_expr = (field.config or {}).get('formula', '')
@@ -1995,7 +2047,7 @@ class FormulaService:
                     try:
                         result = cls.evaluate_formula(
                             formula_expr,
-                            values,
+                            context_by_name,
                             use_cache=False,
                             table_context=table_context
                         )

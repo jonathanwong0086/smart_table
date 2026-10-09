@@ -423,14 +423,21 @@ export const useTableStore = defineStore("table", () => {
 
   async function updateRecord(id: string, values: Record<string, CellValue>) {
     try {
-      // 过滤掉自动编号字段（只读字段不可编辑）
+      // 过滤掉自动编号字段与系统字段（只读字段不可编辑，值由记录元数据维护）
       const editableValues: Record<string, CellValue> = {};
-      const autoNumberFieldIds = fields.value
-        .filter((f) => f.type === FieldType.AUTO_NUMBER)
+      const readonlyFieldIds = fields.value
+        .filter(
+          (f) =>
+            f.type === FieldType.AUTO_NUMBER ||
+            f.type === FieldType.CREATED_BY ||
+            f.type === FieldType.CREATED_TIME ||
+            f.type === FieldType.UPDATED_BY ||
+            f.type === FieldType.UPDATED_TIME,
+        )
         .map((f) => f.id);
 
       for (const [fieldId, value] of Object.entries(values)) {
-        if (!autoNumberFieldIds.includes(fieldId)) {
+        if (!readonlyFieldIds.includes(fieldId)) {
           editableValues[fieldId] = value;
         }
       }

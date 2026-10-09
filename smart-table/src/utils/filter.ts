@@ -7,6 +7,7 @@ import type { FieldEntity, RecordEntity } from "../db/schema";
 import { FilterOperator, FieldType } from "../types";
 import { t } from "@/i18n";
 import { FormulaEngine } from "./formula/engine";
+import { getSystemFieldRawValue, isSystemValueType } from "./systemFields";
 
 /** 操作符枚举值到国际化 key 的映射 */
 const OPERATOR_KEY_MAP: Record<FilterOperatorValue, string> = {
@@ -374,12 +375,16 @@ const DATE_FIELD_TYPES: string[] = [
   FieldType.UPDATED_TIME,
 ];
 
-/** 获取筛选条件的单元格取值：公式字段优先取后端 computed_values，否则前端实时计算 */
+/** 获取筛选条件的单元格取值：公式字段优先取后端 computed_values，否则前端实时计算；系统字段取记录元数据 */
 function getConditionCellValue(
   record: RecordEntity,
   field: FieldEntity,
   fields: FieldEntity[],
 ): unknown {
+  // 系统字段（创建人/创建时间/更新人/更新时间）：值来自记录元数据
+  if (isSystemValueType(field.type)) {
+    return getSystemFieldRawValue(record, field.type);
+  }
   if (field.type === FieldType.FORMULA) {
     const computedValues = (
       record as RecordEntity & { computed_values?: Record<string, unknown> }

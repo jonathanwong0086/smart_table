@@ -231,8 +231,8 @@
     "progress": "进度",
     "created_by": "创建人",
     "created_time": "创建时间",
-    "updated_by": "修改人",
-    "updated_time": "修改时间",
+    "updated_by": "更新人",
+    "updated_time": "更新时间",
     "last_modified_by": "最后修改人",
     "geolocation": "地理位置"
   },
@@ -358,6 +358,7 @@
   "specialHintFormula": "需配置公式",
   "specialHintLink": "需配置关联",
   "specialHintLookup": "需配置查找",
+  "systemFieldHint": "系统字段：字段值由系统自动维护（与记录的创建人/创建时间/更新人/更新时间保持一致），不支持手动编辑，仅需设置字段名称与描述",
   "convertTypeHasDataHint": "该字段已存在数据，仅支持无损类型转换（日期↔日期时间为唯一允许的有损转换，需二次确认）",
   "convertTypeNoDataHint": "该字段暂无数据，可自由调整字段类型",
   "lossyConvertTitle": "确认有损转换",

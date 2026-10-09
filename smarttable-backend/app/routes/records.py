@@ -155,7 +155,8 @@ def get_records(table_id) -> tuple:
                 item['computed_values'] = FormulaService.compute_record_formulas(
                     table_id, record.values,
                     formula_fields=formula_fields,
-                    table_context=table_context
+                    table_context=table_context,
+                    record=record
                 )
             else:
                 item['computed_values'] = {}
@@ -242,9 +243,9 @@ def create_record(table_id) -> tuple:
         result = record.to_dict()
         # 计算公式值
         result['computed_values'] = FormulaService.compute_record_formulas(
-            table_id, record.values
+            table_id, record.values, record=record
         )
-        
+
         return success_response(result, 'record_created_successfully', 201)
     
     except Exception as e:
@@ -482,7 +483,7 @@ def get_record(record_id) -> tuple:
         result = record.to_dict()
         # 计算公式值
         result['computed_values'] = FormulaService.compute_record_formulas(
-            record.table_id, record.values
+            record.table_id, record.values, record=record
         )
 
         # 填充查找字段实时计算值
@@ -571,9 +572,9 @@ def update_record(record_id) -> tuple:
         result = record.to_dict()
         # 计算公式值
         result['computed_values'] = FormulaService.compute_record_formulas(
-            record.table_id, record.values
+            record.table_id, record.values, record=record
         )
-        
+
         return success_response(result, 'record_updated_successfully')
     
     except Exception as e:
@@ -864,7 +865,7 @@ def compute_formulas(record_id) -> tuple:
     
     try:
         computed_values = FormulaService.compute_record_formulas(
-            record.table_id, values
+            record.table_id, values, record=record
         )
         
         return success_response({
@@ -1806,7 +1807,7 @@ def create_child_record(record_id) -> tuple:
 
         result = new_record.to_dict()
         result['computed_values'] = FormulaService.compute_record_formulas(
-            table_id, new_record.values
+            table_id, new_record.values, record=new_record
         )
 
         return success_response(result, 'sub_record_created_successfully', 201)

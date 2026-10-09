@@ -71,9 +71,9 @@ class FieldService:
     """字段服务类"""
     
     # 系统字段类型（自动创建，不能删除）
+    # 注：created_by/last_modified_by 现已允许用户在字段配置界面手动创建，
+    # 自建实例不在此列（可正常删除），仅保留自动编号这类表级自动创建字段
     SYSTEM_FIELD_TYPES = [
-        FieldType.CREATED_BY,
-        FieldType.LAST_MODIFIED_BY,
         FieldType.AUTO_NUMBER
     ]
     
@@ -113,6 +113,9 @@ class FieldService:
     # 系统维护的系统字段类型（值由系统写入，不允许转换）
     CONVERT_SYSTEM_TYPES = [
         FieldType.CREATED_BY.value,
+        FieldType.CREATED_TIME.value,
+        FieldType.UPDATED_BY.value,
+        FieldType.UPDATED_TIME.value,
         FieldType.LAST_MODIFIED_BY.value,
         FieldType.AUTO_NUMBER.value,
     ]
@@ -303,6 +306,7 @@ class FieldService:
         - 选择类型: single_select, multi_select, checkbox
         - 关联类型: link_to_record, lookup, rollup
         - 人员类型: created_by, last_modified_by, collaborator
+        - 系统时间类型: created_time, updated_time（值取自记录元数据）
         - 附件类型: attachment
         - 计算类型: formula, auto_number, barcode
         - 其他类型: email, phone, url, button
@@ -1435,7 +1439,7 @@ class FieldService:
         """空字段转换为需要配置的类型时，校验目标类型所需的配置，确保转换后字段一致。
 
         仅校验「必须提供配置才能成立」的类型；普通类型及系统自维护类型
-        （auto_number / created_by / last_modified_by）无需额外配置。
+        （auto_number / created_by / created_time / updated_by / updated_time / last_modified_by）无需额外配置。
         返回 (是否合法, 错误 i18n key)。
         """
         if new_type in (FieldType.LINK_TO_RECORD.value, FieldType.LINK.value, FieldType.ROLLUP.value):

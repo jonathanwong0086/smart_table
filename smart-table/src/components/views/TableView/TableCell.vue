@@ -15,6 +15,8 @@ import { isFieldRequired, isValueEmpty } from "@/utils/validation";
 import { useTableStore } from "@/stores/tableStore";
 import { ElMessage, ElTooltip } from "element-plus";
 import { FieldType } from "@/types/fields";
+import { getSystemFieldDisplayValue, isSystemValueType } from "@/utils/systemFields";
+import { useUserCacheStore } from "@/stores/userCacheStore";
 import type { LinkedRecord, RelationshipType } from "@/types/link";
 import { linkApiService } from "@/services/api/linkApiService";
 import { truncateRichText } from "@/utils/helpers";
@@ -43,6 +45,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const tableStore = useTableStore();
+const userCacheStore = useUserCacheStore();
 
 /**
  * 构造公式整列引用（[表].[字段]）所需的表上下文：
@@ -117,6 +120,15 @@ const cellValue = computed(() => {
   return props.record.values[props.field.id] ?? null;
 });
 
+// 系统字段（创建人/创建时间/更新人/更新时间）：值来自记录元数据，只读
+const systemDisplayValue = computed(() => {
+  if (!isSystemValueType(props.field.type)) return null;
+  return getSystemFieldDisplayValue(props.record, props.field.type, (id) => {
+    const cached = userCacheStore.getCachedUser(id);
+    return cached?.name || id;
+  });
+});
+
 // 监听关联字段值的变化，重新加载关联记录
 watch(
   () => [props.record.id, props.field.id, cellValue.value],
@@ -167,6 +179,12 @@ const displayValue = computed(() => {
   const options = fieldOptions.value;
 
   switch (type) {
+    case FieldType.CREATED_BY:
+    case FieldType.CREATED_TIME:
+    case FieldType.UPDATED_BY:
+    case FieldType.UPDATED_TIME:
+      // 系统字段：显示记录元数据值（records.created_by/updated_by/created_at/updated_at）
+      return systemDisplayValue.value ?? "";
     case FieldType.SINGLE_LINE_TEXT:
     case FieldType.EMAIL:
     case FieldType.URL:
@@ -386,16 +404,10 @@ const isEditable = computed(() => {
   // 自动编号字段不可编辑
   if (props.field.type === FieldType.AUTO_NUMBER) return false;
 
-  return (
-    !props.readonly &&
-    ![
-      "formula",
-      "createdBy",
-      "createdTime",
-      "updatedBy",
-      "updatedTime",
-    ].includes(props.field.type)
-  );
+  // 系统字段（创建人/创建时间/更新人/更新时间）不可编辑，值由记录元数据维护
+  if (isSystemValueType(props.field.type)) return false;
+
+  return !props.readonly && props.field.type !== FieldType.FORMULA;
 });
 
 // 关联字段配置

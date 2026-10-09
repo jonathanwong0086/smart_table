@@ -1,5 +1,20 @@
 import type { RecordEntity, FieldEntity } from "../db/schema";
 import { FieldType } from "../types";
+import { getSystemFieldRawValue, isSystemValueType } from "./systemFields";
+import { useUserCacheStore } from "../stores/userCacheStore";
+
+/**
+ * 系统字段（创建人/更新人）用户 ID -> 名称解析。
+ * 分组仅在组件上下文中触发（Pinia 已激活）；异常时回退显示原始 ID。
+ */
+function resolveSystemUserNameSafe(userId: string): string {
+  try {
+    const store = useUserCacheStore();
+    return store.getCachedUser(userId)?.name || userId;
+  } catch {
+    return userId;
+  }
+}
 
 export interface GroupNode {
   key: string;
@@ -56,7 +71,11 @@ function groupByField(
   const groups: Map<string, RecordEntity[]> = new Map();
 
   for (const record of records) {
-    const groupKeys = getGroupKeys(record.values[fieldId], field);
+    // 系统字段（创建人/创建时间/更新人/更新时间）分组取值来自记录元数据
+    const sourceValue = isSystemValueType(field.type)
+      ? getSystemFieldRawValue(record, field.type)
+      : record.values[fieldId];
+    const groupKeys = getGroupKeys(sourceValue, field);
     if (groupKeys.length === 0) {
       if (!groups.has("__empty__")) {
         groups.set("__empty__", []);
@@ -262,6 +281,11 @@ function getLinkGroupKeys(value: unknown): string[] {
 function getGroupDisplayValue(key: string, field: FieldEntity): string {
   if (key === "__empty__") {
     return "空值";
+  }
+
+  // 系统字段（创建人/更新人）：分组键为用户 ID，优先解析为用户名称
+  if (field.type === FieldType.CREATED_BY || field.type === FieldType.UPDATED_BY) {
+    return resolveSystemUserNameSafe(key);
   }
 
   switch (field.type) {

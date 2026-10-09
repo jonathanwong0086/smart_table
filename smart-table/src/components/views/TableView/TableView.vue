@@ -25,6 +25,7 @@ import TableRow from "./TableRow.vue";
 import ContextMenu from "@/components/common/ContextMenu.vue";
 import { ElMessage, ElMessageBox, ElIcon } from "element-plus";
 import { isFieldRequired, isValueEmpty } from "@/utils/validation";
+import { getSystemFieldRawValue, isSystemValueType } from "@/utils/systemFields";
 import { ZoomIn, Check } from "@element-plus/icons-vue";
 import RecordDetailDrawer from "@/components/dialogs/RecordDetailDrawer.vue";
 import FieldDialog from "@/components/dialogs/FieldDialog.vue";
@@ -129,10 +130,25 @@ const sortedRecords = computed(() => {
   const sorts = viewStore.currentSorts as SortConfig[];
   if (!sorts || sorts.length === 0) return records.value;
 
+  // 系统字段（创建人/创建时间/更新人/更新时间）排序取值来自记录元数据
+  const sortFieldTypes = new Map(
+    sorts.map((s) => {
+      const f = fields.value.find((sf) => sf.id === s.fieldId);
+      return [s.fieldId, f && isSystemValueType(f.type) ? f.type : null];
+    }),
+  );
+
   return [...records.value].sort((a, b) => {
     for (const sort of sorts) {
-      const aVal = a.values[sort.fieldId];
-      const bVal = b.values[sort.fieldId];
+      const systemType = sortFieldTypes.get(sort.fieldId);
+      const aVal =
+        systemType !== null && systemType !== undefined
+          ? getSystemFieldRawValue(a, systemType)
+          : a.values[sort.fieldId];
+      const bVal =
+        systemType !== null && systemType !== undefined
+          ? getSystemFieldRawValue(b, systemType)
+          : b.values[sort.fieldId];
 
       let comparison = 0;
       if (aVal === null || aVal === undefined) {

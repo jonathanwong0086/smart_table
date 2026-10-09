@@ -34,6 +34,9 @@ class FieldType(PyEnum):
     LOOKUP = 'lookup'
     ROLLUP = 'rollup'
     CREATED_BY = 'created_by'
+    CREATED_TIME = 'created_time'
+    UPDATED_BY = 'updated_by'
+    UPDATED_TIME = 'updated_time'
     LAST_MODIFIED_BY = 'last_modified_by'
     COLLABORATOR = 'collaborator'
     ATTACHMENT = 'attachment'
@@ -174,6 +177,9 @@ class Field(db.Model):
             FieldType.LOOKUP: [],
             FieldType.ROLLUP: None,
             FieldType.CREATED_BY: None,
+            FieldType.CREATED_TIME: None,
+            FieldType.UPDATED_BY: None,
+            FieldType.UPDATED_TIME: None,
             FieldType.LAST_MODIFIED_BY: None,
             FieldType.COLLABORATOR: [],
             FieldType.ATTACHMENT: [],

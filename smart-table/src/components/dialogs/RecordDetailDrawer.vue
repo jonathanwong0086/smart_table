@@ -23,6 +23,8 @@ import { Clock, Connection } from "@element-plus/icons-vue";
 const { t } = useI18n();
 import { useWorkflowStore } from "@/stores";
 import { useMemberStore } from "@/stores/memberStore";
+import { useUserCacheStore } from "@/stores/userCacheStore";
+import { getSystemFieldDisplayValue, isSystemValueType } from "@/utils/systemFields";
 import { useBaseStore } from "@/stores/baseStore";
 import type { Workflow } from "@/types/workflow";
 import type { RecordEntity, FieldEntity } from "@/db/schema";
@@ -187,6 +189,11 @@ const historyVisible = ref(false);
 // 工作流相关状态
 const workflowStore = useWorkflowStore();
 const memberStore = useMemberStore();
+const userCacheStore = useUserCacheStore();
+
+// 系统字段（创建人/更新人）用户 ID -> 名称解析
+const resolveSystemUserName = (userId: string): string =>
+  userCacheStore.getCachedUser(userId)?.name || userId;
 const baseStore = useBaseStore();
 const triggerDialogVisible = ref(false);
 const triggerableWorkflows = ref<Workflow[]>([]);
@@ -744,7 +751,14 @@ async function handleSave() {
 
   isSaving.value = true;
   try {
-    emit("save", props.record.id, { ...formData.value });
+    // 系统字段（创建人/创建时间/更新人/更新时间）值由记录元数据维护，不参与保存
+    const systemFieldIds = new Set(
+      visibleFields.value.filter((f) => isSystemValueType(f.type)).map((f) => f.id),
+    );
+    const payload = Object.fromEntries(
+      Object.entries(formData.value).filter(([fieldId]) => !systemFieldIds.has(fieldId)),
+    );
+    emit("save", props.record.id, payload);
     ElMessage.success(t("record.saved"));
     // 保存成功后自动关闭抽屉
     closeDrawer();
@@ -825,8 +839,22 @@ const effectiveSize = computed<string | number>(() => {
             >
           </label>
 
+          <!-- 系统字段（创建人/创建时间/更新人/更新时间）：只读展示记录元数据 -->
+          <template v-if="isSystemValueType(field.type)">
+            <el-input
+              :model-value="
+                getSystemFieldDisplayValue(
+                  record,
+                  field.type,
+                  resolveSystemUserName,
+                )
+              "
+              disabled
+              class="field-input" />
+          </template>
+
           <!-- 单行文本 -->
-          <template v-if="field.type === FieldType.SINGLE_LINE_TEXT">
+          <template v-else-if="field.type === FieldType.SINGLE_LINE_TEXT">
             <el-input
               :model-value="String(formData[field.id] || '')"
               @update:model-value="(val) => handleValueChange(field.id, val)"

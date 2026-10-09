@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { exportToExcel, exportToCSV, exportToJSON, type ExportContext } from '@/utils/export'
 import type { FieldEntity, RecordEntity } from '@/db/schema'
 import { FieldType } from '@/types'
+import { getSystemFieldRawValue } from '@/utils/systemFields'
 import { useUserCacheStore } from '@/stores/userCacheStore'
 import { useTableStore } from '@/stores/tableStore'
 import { linkApiService } from '@/services/api/linkApiService'
@@ -64,25 +65,33 @@ async function handleExport() {
     const fieldsToExport = props.fields.filter(f => selectedFields.value.includes(f.id))
     const recordsToExport = props.records
 
-    // 构建导出上下文：成员 ID -> 名称 映射（成员字段导出为名称而非 id）
+    // 构建导出上下文：成员 ID -> 名称 映射（成员字段与系统用户字段导出为名称而非 id）
     const context: ExportContext = {}
     // 公式字段在前端回退计算时需要表格全部字段（用于解析跨字段引用）
     context.allFields = tableStore.fields
     const memberFieldIds = fieldsToExport
       .filter((f) => f.type === FieldType.MEMBER)
       .map((f) => f.id)
-    if (memberFieldIds.length > 0) {
-      const memberIds = new Set<string>()
-      for (const record of recordsToExport) {
-        for (const fieldId of memberFieldIds) {
-          const val = (record as any).values?.[fieldId]
-          if (Array.isArray(val)) {
-            val.forEach((v) => v != null && memberIds.add(String((v as any).id ?? v)))
-          } else if (val != null) {
-            memberIds.add(String((val as any).id ?? val))
-          }
+    // 系统字段（创建人/更新人）的用户 ID 来自记录元数据
+    const systemUserFields = fieldsToExport.filter(
+      (f) => f.type === FieldType.CREATED_BY || f.type === FieldType.UPDATED_BY,
+    )
+    const memberIds = new Set<string>()
+    for (const record of recordsToExport) {
+      for (const fieldId of memberFieldIds) {
+        const val = (record as any).values?.[fieldId]
+        if (Array.isArray(val)) {
+          val.forEach((v) => v != null && memberIds.add(String((v as any).id ?? v)))
+        } else if (val != null) {
+          memberIds.add(String((val as any).id ?? val))
         }
       }
+      for (const field of systemUserFields) {
+        const val = getSystemFieldRawValue(record, field.type)
+        if (val != null && val !== '') memberIds.add(String(val))
+      }
+    }
+    if (memberIds.size > 0) {
       const users = await userCacheStore.fetchUsers(Array.from(memberIds))
       context.memberNameMap = new Map(users.map((u) => [u.id, u.name]))
     }

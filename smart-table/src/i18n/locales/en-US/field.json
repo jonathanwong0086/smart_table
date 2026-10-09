@@ -358,6 +358,7 @@
   "specialHintFormula": "Requires a formula",
   "specialHintLink": "Requires a link",
   "specialHintLookup": "Requires a lookup",
+  "systemFieldHint": "System field: the value is maintained automatically by the system (kept in sync with the record's creator, creation time, updater and update time). It cannot be edited manually; only the field name and description are configurable.",
   "convertTypeHasDataHint": "This field already has data. Only lossless conversions are allowed (Date ↔ Date Time is the only permitted lossy conversion, requiring confirmation)",
   "convertTypeNoDataHint": "This field has no data yet, so you can freely change its type",
   "lossyConvertTitle": "Confirm lossy conversion",

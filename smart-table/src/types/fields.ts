@@ -379,6 +379,8 @@ export function getUserCreatableFieldTypeOptions(options?: {
   includeSpecial?: boolean;
   /** 是否标记特殊字段类型 */
   markSpecial?: boolean;
+  /** 是否包含系统字段类型（创建人/创建时间/更新人/更新时间） */
+  includeSystem?: boolean;
 }): FieldTypeConfig[] {
   const { includeSpecial = true, markSpecial = false } = options || {};
 
@@ -409,9 +411,21 @@ export function getUserCreatableFieldTypeOptions(options?: {
     FieldType.LOOKUP,
   ];
 
-  const allTypes = includeSpecial
-    ? [...normalTypes, ...specialTypes]
-    : normalTypes;
+  // 系统字段类型：值由记录元数据维护（records.created_by/updated_by/created_at/updated_at），只读
+  const systemTypes: FieldTypeValue[] = [
+    FieldType.CREATED_BY,
+    FieldType.CREATED_TIME,
+    FieldType.UPDATED_BY,
+    FieldType.UPDATED_TIME,
+  ];
+
+  const { includeSystem = false } = options || {};
+
+  const allTypes = [
+    ...normalTypes,
+    ...(includeSpecial ? specialTypes : []),
+    ...(includeSystem ? systemTypes : []),
+  ];
 
   return allTypes.map((type) => {
     const isSpecial = specialTypes.includes(type);

@@ -9,6 +9,7 @@ import {
   getFormulaRawValue,
 } from "@/utils/formula/formatFormula";
 import { t } from "@/i18n";
+import { getSystemFieldDisplayValue, isSystemValueType } from "@/utils/systemFields";
 
 export interface ExportOptions {
   filename?: string;
@@ -94,6 +95,13 @@ function formatValueForExcel(
   // 公式字段：优先后端预计算结果，缺失时前端回退计算（与表格视图显示一致）
   if (field.type === FieldType.FORMULA) {
     return calculateFormulaDisplay(field, record as RecordEntity, context.allFields ?? []);
+  }
+
+  // 系统字段（创建人/创建时间/更新人/更新时间）：值来自记录元数据，与表格视图显示一致
+  if (isSystemValueType(field.type)) {
+    return getSystemFieldDisplayValue(record, field.type, (id) =>
+      context.memberNameMap?.get(id) ?? id,
+    );
   }
 
   if (value === null || value === undefined) return "";
@@ -207,6 +215,13 @@ function formatValueForCSV(
   // 公式字段：优先后端预计算结果，缺失时前端回退计算（与表格视图显示一致）
   if (field.type === FieldType.FORMULA) {
     return calculateFormulaDisplay(field, record as RecordEntity, context.allFields ?? []);
+  }
+
+  // 系统字段（创建人/创建时间/更新人/更新时间）：值来自记录元数据，与表格视图显示一致
+  if (isSystemValueType(field.type)) {
+    return getSystemFieldDisplayValue(record, field.type, (id) =>
+      context.memberNameMap?.get(id) ?? id,
+    );
   }
 
   if (value === null || value === undefined) return "";

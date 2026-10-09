@@ -177,11 +177,23 @@ const newField = ref<{
   geoFormat: "province_city_district",
 });
 
-// 用户可创建的字段类型配置列表
+// 用户可创建的字段类型配置列表（含系统字段类型：创建人/创建时间/更新人/更新时间）
 const fieldTypeConfigs = getUserCreatableFieldTypeOptions({
   includeSpecial: true,
   markSpecial: false,
+  includeSystem: true,
 });
+
+// 系统字段类型（创建人/创建时间/更新人/更新时间）：
+// 值由记录元数据（records.created_by/updated_by/created_at/updated_at）自动维护，
+// 配置界面仅允许设置字段名称与描述，其余配置项一律不提供
+const isSystemValueField = computed(
+  () =>
+    newField.value.type === FieldType.CREATED_BY ||
+    newField.value.type === FieldType.CREATED_TIME ||
+    newField.value.type === FieldType.UPDATED_BY ||
+    newField.value.type === FieldType.UPDATED_TIME,
+);
 
 // 地理位置子格式列表
 const geoFormats: { value: GeoFormat }[] = [
@@ -1375,18 +1387,11 @@ const presetColors = [
   "#10B981",
 ];
 
-// 可用于公式的字段（排除公式字段自身和某些系统字段）
+// 可用于公式的字段（仅排除当前编辑的字段，避免循环引用；
+// 系统字段创建人/创建时间/更新人/更新时间取值自记录元数据，允许被公式引用）
 const availableFieldsForFormula = computed(() => {
   return props.fields.filter((field) => {
-    // 排除当前编辑的字段（避免循环引用）
     if (editingField.value && field.id === editingField.value.id) {
-      return false;
-    }
-    // 排除某些系统字段
-    if (
-      field.type === FieldType.CREATED_BY ||
-      field.type === FieldType.UPDATED_BY
-    ) {
       return false;
     }
     return true;
@@ -1799,6 +1804,9 @@ async function toggleFieldVisibility(
             class="type-convert-notice">
             <el-icon><WarningFilled /></el-icon>
             <span>{{ currentConversionNotice }}</span>
+          </div>
+          <div v-if="isSystemValueField" class="field-hint">
+            {{ t('field.systemFieldHint') }}
           </div>
         </ElFormItem>
 
@@ -2341,23 +2349,20 @@ async function toggleFieldVisibility(
             @update:field="onLookupConfigUpdate" />
         </template>
 
-        <!-- 必填选项：自动编号、公式、查找、关联等字段不需要必填选项 -->
+        <!-- 必填选项：系统字段、自动编号、公式、查找、关联等字段不需要必填选项 -->
         <ElFormItem
           v-if="
+            !isSystemValueField &&
             newField.type !== FieldType.AUTO_NUMBER &&
             newField.type !== FieldType.FORMULA &&
             newField.type !== FieldType.LOOKUP &&
-            newField.type !== FieldType.LINK &&
-            newField.type !== FieldType.CREATED_TIME &&
-            newField.type !== FieldType.UPDATED_TIME &&
-            newField.type !== FieldType.CREATED_BY &&
-            newField.type !== FieldType.LAST_MODIFIED_BY
+            newField.type !== FieldType.LINK
           "
           :label="t('field.required')">
           <ElSwitch v-model="newField.isRequired" />
         </ElFormItem>
 
-        <ElFormItem :label="t('field.mergeCell')">
+        <ElFormItem v-if="!isSystemValueField" :label="t('field.mergeCell')">
           <ElSwitch v-model="newField.mergeCell" />
           <div class="field-hint">&nbsp;{{ t('field.mergeCellHint') }}</div>
         </ElFormItem>
@@ -2373,13 +2378,10 @@ async function toggleFieldVisibility(
         <!-- 默认值配置：查找字段、公式字段、自动编号、系统字段等不需要默认值 -->
         <ElFormItem
           v-if="
+            !isSystemValueField &&
             newField.type !== FieldType.LOOKUP &&
             newField.type !== FieldType.FORMULA &&
             newField.type !== FieldType.AUTO_NUMBER &&
-            newField.type !== FieldType.CREATED_TIME &&
-            newField.type !== FieldType.UPDATED_TIME &&
-            newField.type !== FieldType.CREATED_BY &&
-            newField.type !== FieldType.LAST_MODIFIED_BY &&
             newField.type !== FieldType.LINK
           "
           :label="t('field.defaultValue')">
