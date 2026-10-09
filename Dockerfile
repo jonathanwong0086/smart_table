@@ -163,7 +163,17 @@ RUN python -m compileall -b app/ migrations/ docker/server_runner.py \
     find app/ migrations/ docker/ -type d -name '__pycache__' -prune -exec rm -rf {} + && \
     find /app -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \
         -o -name '*.pem' -o -name '*.key' -o -name '*.p12' -o -name '*.pfx' \) -delete && \
-    find /app -type d -empty -name '__pycache__' -delete
+    find /app -type d -empty -name '__pycache__' -delete && \
+    printf '%s\n' \
+      '# run.py 兼容转发 stub (非业务源码): 转发到编译后的 run.pyc，' \
+      '# 保证旧版启动脚本/容器命令覆盖 (python run.py) 依然可用' \
+      'import importlib.util, os, sys' \
+      '_pyc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.pyc")' \
+      '_spec = importlib.util.spec_from_file_location("__main__", _pyc)' \
+      '_mod = importlib.util.module_from_spec(_spec)' \
+      'sys.modules["__main__"] = _mod' \
+      '_spec.loader.exec_module(_mod)' \
+      > /app/run.py
 
 # 修复 Windows CRLF 换行符问题，并设置权限
 RUN sed -i 's/\r$//' /entrypoint.sh /etc/nginx/nginx.conf /etc/supervisor/conf.d/supervisord.conf /etc/redis/redis.conf && \
