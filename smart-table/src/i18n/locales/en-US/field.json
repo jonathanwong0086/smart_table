@@ -148,6 +148,7 @@
   "digitsUnit": "digits",
   "formulaExpr": "Formula expression",
   "formulaExprPlaceholder": "Enter a formula, e.g. SUM({Price}, {Qty}) or {Price} * {Qty}",
+  "formulaRequired": "Formula expression is required",
   "formulaExprHint": "Reference other fields with {Field Name}; supports math, text, date and logical functions",
   "formulaPrecisionHint": "Set the number of decimal places for the formula result; default is 0",
   "previewLabel": "Preview",

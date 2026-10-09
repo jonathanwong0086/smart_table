@@ -9,7 +9,11 @@ import LinkField from "@/components/fields/LinkField/LinkField.vue";
 import DateInput from "@/components/fields/DateInput.vue";
 import MemberDisplay from "@/components/common/MemberDisplay.vue";
 import MemberSelect from "@/components/common/MemberSelect.vue";
-import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine";
+import {
+  FormulaEngine,
+  type FormulaError,
+  type FormulaTableContext,
+} from "@/utils/formula/engine";
 import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { isFieldRequired, isValueEmpty } from "@/utils/validation";
 import { useTableStore } from "@/stores/tableStore";
@@ -312,8 +316,11 @@ const calculateFormula = (): string => {
     // computed_values 使用字段名作为 key
     const fieldName = props.field.name;
     const precomputed = computedValues[fieldName];
-    
-    if (precomputed !== null && precomputed !== undefined) {
+
+    // 后端计算报错（"#ERROR: ..."）时回退前端引擎兜底计算，而非直接展示错误串
+    const isBackendError =
+      typeof precomputed === 'string' && precomputed.startsWith('#ERROR');
+    if (precomputed !== null && precomputed !== undefined && !isBackendError) {
       // 配置了日期/日期时间显示格式时，严格按配置格式化
       const dateFormatted = formatFormulaDateByConfig(precomputed, fieldOptions.value);
       if (dateFormatted !== null) return dateFormatted;
@@ -359,6 +366,11 @@ const calculateFormula = (): string => {
     
     const engine = new FormulaEngine(allFields, buildFormulaTableContext());
     const result = engine.calculate(props.record, formula);
+
+    // 引擎返回 FormulaError 对象时透出具体失败原因（如"未找到字段: xxx"）
+    if (result && typeof result === "object" && "message" in result) {
+      return String((result as FormulaError).message) || t("view.calcError");
+    }
 
     if (result === "#ERROR") {
       return t("view.calcError");

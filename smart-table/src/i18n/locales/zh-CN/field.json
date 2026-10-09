@@ -148,6 +148,7 @@
   "digitsUnit": "位",
   "formulaExpr": "公式表达式",
   "formulaExprPlaceholder": "输入公式，如: SUM({单价}, {数量}) 或 {单价} * {数量}",
+  "formulaRequired": "请输入公式表达式",
   "formulaExprHint": "使用 {字段名} 引用其他字段，支持数学、文本、日期、逻辑函数",
   "formulaPrecisionHint": "设置公式结果显示的小数位数，默认为 0",
   "previewLabel": "预览",

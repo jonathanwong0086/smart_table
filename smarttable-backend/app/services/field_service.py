@@ -295,6 +295,49 @@ class FieldService:
         return Field.query.get(field_id)
     
     @staticmethod
+    def _validate_formula_expression(
+        table_id: str,
+        formula_expr: str,
+        exclude_field_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        公式字段保存校验：语法解析 + 字段引用有效性
+
+        保存时当场校验，避免错误公式静默保存后在计算阶段才暴露。
+        返回错误信息字符串；通过校验返回 None。
+
+        Args:
+            table_id: 表格 ID（用于字段引用存在性校验）
+            formula_expr: 公式表达式
+            exclude_field_id: 编辑时排除自身（自身旧名不算缺失引用）
+        """
+        formula_expr = (formula_expr or '').strip()
+        if not formula_expr:
+            return translate('formula_expression_required')
+
+        # 语法校验：解析失败即返回具体错误（如"无法解析的字符: 'V'(位置 6)"）
+        from app.services.formula_service import FormulaParser, FormulaError
+        try:
+            FormulaParser().parse(formula_expr)
+        except FormulaError as e:
+            return str(e)
+
+        # 引用有效性：{字段名} 引用的本表字段必须存在（编辑时排除自身）
+        import re as _re
+        fields = Field.query.filter_by(table_id=table_id).all()
+        existing_names = {
+            f.name.strip().lower() for f in fields
+            if exclude_field_id is None or str(f.id) != str(exclude_field_id)
+        }
+        missing = [
+            name for name in _re.findall(r'\{([^{}]+)\}', formula_expr)
+            if name.strip().lower() not in existing_names
+        ]
+        if missing:
+            return translate('formula_unknown_field_reference', ', '.join(missing))
+
+        return None
+
     def create_field(table_id: str, data: Dict[str, Any], user_id: str = None) -> Dict[str, Any]:
         """
         创建新字段
@@ -342,6 +385,15 @@ class FieldService:
             config_data = data.get('config', {}) or {}
             is_valid, error_msg = LookupService.validate_config(config_data, table_id)
             if not is_valid:
+                return {'success': False, 'error': error_msg}
+
+        # 公式字段校验：语法与字段引用（保存时当场提示，避免错误公式静默保存）
+        if field_type == FieldType.FORMULA.value:
+            options = data.get('options', {}) or {}
+            config_data = data.get('config', {}) or {}
+            formula_expr = options.get('formula') or config_data.get('formula') or ''
+            error_msg = FieldService._validate_formula_expression(table_id, formula_expr)
+            if error_msg:
                 return {'success': False, 'error': error_msg}
 
         # 验证默认值（如果提供）
@@ -421,6 +473,17 @@ class FieldService:
 
         # 字段更新（改名/公式/选项）影响整列引用的列数据
         FormulaService.invalidate_table_context_cache(table_id=str(field.table_id))
+
+        # 公式字段校验：表达式变化时校验语法与字段引用
+        if field.type == FieldType.FORMULA.value:
+            options = data.get('options') if 'options' in data else (field.options or {})
+            config_data = data.get('config') if 'config' in data else (field.config or {})
+            formula_expr = (options or {}).get('formula') or (config_data or {}).get('formula') or ''
+            error_msg = FieldService._validate_formula_expression(
+                str(field.table_id), formula_expr, exclude_field_id=str(field.id)
+            )
+            if error_msg:
+                return {'success': False, 'error': error_msg}
 
         # 检查是否是系统字段
         if field.is_primary and 'is_primary' in data and not data['is_primary']:

@@ -22,6 +22,7 @@ import {
   ElNotification,
 } from "element-plus";
 import { fieldService } from "@/db/services/fieldService";
+import { FormulaEngine } from "@/utils/formula/engine";
 import { useViewStore } from "@/stores/viewStore";
 import { useTableStore } from "@/stores/tableStore";
 import {
@@ -834,6 +835,21 @@ async function createField() {
     }
   }
 
+  // 公式字段验证：语法与字段引用（保存前当场提示）
+  if (newField.value.type === FieldType.FORMULA) {
+    const expr = (newField.value.formula || "").trim();
+    if (!expr) {
+      ElMessage.warning(t("field.formulaRequired"));
+      return;
+    }
+    const engine = new FormulaEngine(props.fields);
+    const check = engine.validateFormula(expr);
+    if (!check.valid) {
+      ElMessage.error(check.error || t("view.calcError"));
+      return;
+    }
+  }
+
   try {
     const options: FieldOptions = {};
     if (
@@ -1024,6 +1040,21 @@ async function updateField() {
   if (newField.value.type === FieldType.LINK) {
     if (!newField.value.linkConfig.targetTableId) {
       ElMessage.warning(t('field.selectTargetTableRequired'));
+      return;
+    }
+  }
+
+  // 公式字段验证：语法与字段引用（保存前当场提示）
+  if (newField.value.type === FieldType.FORMULA) {
+    const expr = (newField.value.formula || "").trim();
+    if (!expr) {
+      ElMessage.warning(t("field.formulaRequired"));
+      return;
+    }
+    const engine = new FormulaEngine(props.fields);
+    const check = engine.validateFormula(expr);
+    if (!check.valid) {
+      ElMessage.error(check.error || t("view.calcError"));
       return;
     }
   }

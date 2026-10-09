@@ -62,4 +62,22 @@ describe("公式引擎：引用系统字段", () => {
     // 两条记录的创建人均非空 → COUNT = 2
     expect(engine.calculate(recordA, "COUNT([订单].[创建人])")).toBe(2);
   });
+
+  it("计算失败时返回带原因的 FormulaError 而非裸 #ERROR", () => {
+    const engine = new FormulaEngine(fields);
+    // 语法错误（括号不闭合，safeEval 抛异常）→ 错误对象含原因
+    const syntaxErr = engine.calculate(recordA, "(1 + 2") as {
+      message?: string;
+    };
+    expect(typeof syntaxErr).toBe("object");
+    expect(syntaxErr.message).toBeTruthy();
+    expect(syntaxErr.message).not.toBe("#ERROR");
+
+    // NaN 结果（如负数开方）→ 错误对象保留函数名与参数（全角括号防止递归重匹配）
+    const nanErr = engine.calculate(recordA, "SQRT(-1)") as {
+      message?: string;
+    };
+    expect(typeof nanErr).toBe("object");
+    expect(String(nanErr.message)).toContain("SQRT（-1）");
+  });
 });

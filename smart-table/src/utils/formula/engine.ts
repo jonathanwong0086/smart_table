@@ -85,7 +85,10 @@ export class FormulaEngine {
     }
   }
 
-  private evaluate(formula: string, record: RecordEntity): CellValue {
+  private evaluate(
+    formula: string,
+    record: RecordEntity,
+  ): CellValue | FormulaError {
     let expression = formula.trim();
 
     // 1. 整列引用 [表].[字段] → 数组字面量（须先于行级字段引用）
@@ -101,13 +104,42 @@ export class FormulaEngine {
     try {
       const resolvedValue = this.tryResolveFullyEvaluatedValue(expression);
       if (resolvedValue !== undefined) {
-        return this.normalizeResult(resolvedValue);
+        const resolved = this.normalizeResult(resolvedValue);
+        if (resolved !== "#ERROR") return resolved;
+        return this.nanError(expression);
       }
       const result = this.safeEval(expression);
-      return this.normalizeResult(result);
-    } catch {
-      return "#ERROR";
+      const normalized = this.normalizeResult(result);
+      if (normalized === "#ERROR") {
+        return this.nanError(expression);
+      }
+      return normalized;
+    } catch (error) {
+      // 透出具体失败原因，而非吞掉只返回 '#ERROR'。
+      // 表达式内已含 "#ERROR: 函数(...) - 原因" 标记（函数求值失败嵌入）时，
+      // 直接展示全文；否则展示「计算错误: 异常信息」。
+      if (expression.includes("#ERROR")) {
+        return { message: expression, code: "CALCULATION_ERROR" };
+      }
+      return {
+        message:
+          error instanceof Error
+            ? `${t("formula.calcError")}: ${error.message}`
+            : t("formula.calcError"),
+        code: "CALCULATION_ERROR",
+      };
     }
+  }
+
+  /**
+   * 求值结果为 NaN/Infinity（如空值参与算术）时的错误对象。
+   * 带上替换后的表达式辅助定位（如 "8 - null" 表明某字段值为空）。
+   */
+  private nanError(expression: string): FormulaError {
+    return {
+      message: `${t("formula.calcError")}: ${expression}`,
+      code: "CALCULATION_ERROR",
+    };
   }
 
   private tryResolveFullyEvaluatedValue(expression: string): unknown | undefined {
@@ -270,6 +302,26 @@ export class FormulaEngine {
     }
   }
 
+  /**
+   * 函数求值结果 → 表达式片段。
+   * 两类结果不能以字面形式嵌入表达式（后续 safeEval 会产生无信息的
+   * Invalid expression / '#ERROR'）：
+   * - NaN/Infinity（如 SQRT(-1)）
+   * - 函数内部自行返回的 '#ERROR' 错误标记字符串
+   * 统一转为抛错走 #ERROR 标记路径，错误信息保留函数名与参数，便于定位。
+   */
+  private funcResultToExpression(value: CellValue): string {
+    if (typeof value === "number" && !isFinite(value)) {
+      throw new Error(t("formula.calcError"));
+    }
+    if (typeof value === "string" && value.startsWith("#ERROR")) {
+      throw new Error(
+        value.replace(/^#ERROR:?\s*/, "") || t("formula.calcError"),
+      );
+    }
+    return this.valueToExpression(value, undefined);
+  }
+
   private evaluateFunctions(expression: string): string {
     const functionNames = Object.keys(formulaFunctions).join("|");
 
@@ -277,7 +329,8 @@ export class FormulaEngine {
     let result = expression;
     let prevResult: string;
 
-    // 循环处理直到没有变化（所有函数都被执行）
+    // 循环处理直到没有变化（所有函数都被执行）；迭代上限兜底防发散
+    let iterations = 0;
     do {
       prevResult = result;
 
@@ -303,18 +356,20 @@ export class FormulaEngine {
               upperName,
               evaluatedArgs,
             );
-            return this.valueToExpression(statResult as CellValue, undefined);
+            return this.funcResultToExpression(statResult as CellValue);
           }
 
           const parsedArgs = this.parseArguments(evaluatedArgs);
           const funcResult = func(...parsedArgs);
-          return this.valueToExpression(funcResult as CellValue, undefined);
+          return this.funcResultToExpression(funcResult as CellValue);
         } catch (e) {
           const errorMsg = e instanceof Error ? e.message : String(e);
-          return `#ERROR: ${funcName}(${args}) - ${errorMsg}`;
+          // 用全角括号包裹参数：错误标记文本不能再匹配半角函数调用正则，
+          // 否则 do-while 递归处理时会对标记内的原函数调用反复替换导致指数发散
+          return `#ERROR: ${funcName}（${args}） - ${errorMsg}`;
         }
       });
-    } while (result !== prevResult);
+    } while (result !== prevResult && ++iterations < 50);
 
     return result;
   }

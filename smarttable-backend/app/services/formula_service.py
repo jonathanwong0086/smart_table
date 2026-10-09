@@ -55,7 +55,8 @@ class FormulaParser:
         ('FIELD_REF', r'\{[^}]+\}'),
         # CurrentValue（统计函数惰性条件中的当前元素，大小写不敏感）
         ('CURRENT_VALUE', r'(?i:CURRENTVALUE)\b'),
-        ('FUNCTION', r'[A-Z_][A-Z0-9_]*(?=\s*\()'),
+        # 函数名大小写不敏感（value(...) 与 VALUE(...) 等价，parser 求值时统一 upper）
+        ('FUNCTION', r'(?i:[A-Z_][A-Z0-9_]*)(?=\s*\()'),
         ('IDENTIFIER', r'[A-Z_][A-Z0-9_]*'),
         ('LPAREN', r'\('),
         ('RPAREN', r'\)'),
@@ -81,7 +82,10 @@ class FormulaParser:
         """
         tokens = []
         pos = 0
-        
+
+        # 全角符号归一化：全角括号/逗号常由中文输入法误输入，统一转半角后解析
+        formula = formula.replace('（', '(').replace('）', ')').replace('，', ',')
+
         while pos < len(formula):
             match = None
             
@@ -951,17 +955,8 @@ def fn_text(args: List[Any]) -> str:
 
 @FormulaEvaluator.register('VALUE')
 def fn_value(args: List[Any]) -> Optional[float]:
-    """将文本转为数字"""
-    val = args[0]
-    if val is None:
-        return None
-    try:
-        if isinstance(val, (int, float)):
-            return float(val)
-        cleaned = str(val).replace(',', '').replace(' ', '')
-        return float(cleaned)
-    except (ValueError, TypeError):
-        raise FormulaError(f"无法将 '{val}' 转换为数字")
+    """将文本转为数字（复用 _to_number：剥离货币符号/千分位；非数字返回 None）"""
+    return _to_number(args[0])
 
 
 # ==================== 日期函数注册 ====================
@@ -1846,6 +1841,7 @@ class FormulaService:
         if record is None:
             return context
 
+        # 系统维护字段（创建人/创建时间/更新人/更新时间/最后修改人）从元数据注入
         meta_by_type = {
             FieldType.CREATED_BY.value: str(record.created_by) if record.created_by else None,
             FieldType.UPDATED_BY.value: str(record.updated_by) if record.updated_by else None,
@@ -1856,6 +1852,17 @@ class FormulaService:
         for f in all_fields:
             if f.type in meta_by_type:
                 context[f.name] = meta_by_type[f.type]
+
+        # 查找字段值不落 record.values（实时计算），公式引用时现算注入：
+        # 先求查找字段结果再计算公式，保证 {查找字段} 参与运算取到真实值
+        from app.services.lookup_service import LookupService
+
+        for f in all_fields:
+            if f.type == FieldType.LOOKUP.value:
+                try:
+                    context[f.name] = LookupService.compute_lookup_value(record, f)
+                except Exception:
+                    context[f.name] = None
 
         return context
 

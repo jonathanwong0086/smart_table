@@ -3524,6 +3524,14 @@ MESSAGES = {
         'zh-CN': '{0} 类型字段必须提供选项列表',
         'en-US': 'Options list is required for field type {0}',
     },
+    'formula_expression_required': {
+        'zh-CN': '公式表达式不能为空',
+        'en-US': 'Formula expression is required',
+    },
+    'formula_unknown_field_reference': {
+        'zh-CN': '公式引用了不存在的字段: {0}',
+        'en-US': 'Formula references unknown field(s): {0}',
+    },
     'cannot_convert_field_type': {
         'zh-CN': '不能将 {0} 转换为 {1}',
         'en-US': 'Cannot convert {0} to {1}',

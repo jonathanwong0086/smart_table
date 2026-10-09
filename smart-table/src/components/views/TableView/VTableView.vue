@@ -32,7 +32,11 @@ import GeoField from "@/components/fields/geo/GeoField.vue";
 import { formatDateTime, formatDate } from "@/utils/timezone";
 import { useUserCacheStore } from "@/stores/userCacheStore";
 import { validateFieldFormat } from "@/utils/validation";
-import { FormulaEngine, type FormulaTableContext } from "@/utils/formula/engine";
+import {
+  FormulaEngine,
+  type FormulaError,
+  type FormulaTableContext,
+} from "@/utils/formula/engine";
 import { formatFormulaDateByConfig } from "@/utils/formula/formatFormula";
 import { formatNumberField } from "@/utils/numberFormat";
 import { getSystemFieldDisplayValue, getSystemFieldRawValue, isSystemValueType } from "@/utils/systemFields";
@@ -3318,7 +3322,10 @@ const computeFormulaCellValue = (
   const computedValues = record?.computed_values;
   if (computedValues && typeof computedValues === 'object') {
     const precomputed = computedValues[field.name];
-    if (precomputed !== null && precomputed !== undefined) {
+    // 后端计算报错（"#ERROR: ..."）时回退前端引擎兜底计算，而非直接展示错误串
+    const isBackendError =
+      typeof precomputed === 'string' && precomputed.startsWith('#ERROR');
+    if (precomputed !== null && precomputed !== undefined && !isBackendError) {
       // 配置了日期/日期时间显示格式时，严格按配置格式化
       const dateFormatted = formatFormulaDateByConfig(precomputed, field.options);
       if (dateFormatted !== null) return dateFormatted;
@@ -3343,6 +3350,10 @@ const computeFormulaCellValue = (
   if (!engine) return '';
   try {
     const result = engine.calculate(record, formula);
+    // 引擎返回 FormulaError 对象时透出具体失败原因（如"未找到字段: xxx"）
+    if (result && typeof result === 'object' && 'message' in result) {
+      return String((result as FormulaError).message) || t('view.calcError');
+    }
     if (result === '#ERROR') return t('view.calcError');
     // 配置了日期/日期时间显示格式时，严格按配置格式化
     const dateFormatted = formatFormulaDateByConfig(result, field.options);

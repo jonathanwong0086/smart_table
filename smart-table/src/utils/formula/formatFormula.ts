@@ -150,6 +150,11 @@ export function getFormulaRawValue(
       ? computedValues[field.name]
       : undefined;
 
+  // 后端计算报错（"#ERROR: ..."）时视为缺失，回退前端引擎兜底计算
+  if (typeof raw === "string" && raw.startsWith("#ERROR")) {
+    raw = undefined;
+  }
+
   if (raw === null || raw === undefined) {
     if (!allFields || allFields.length === 0) return undefined;
     try {
