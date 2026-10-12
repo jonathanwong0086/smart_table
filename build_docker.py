@@ -546,6 +546,13 @@ def ensure_base_images(image_name):
     mapping = {}
     for arg_name, src, tag in BASE_IMAGES:
         ref = f'{base_repo}:{tag}'
+        # 已存在且为多平台 manifest 时直接复用，避免每次构建重复跨网复制
+        pre = run_command(['docker', 'buildx', 'imagetools', 'inspect', ref],
+                          capture=True, check=False)
+        if pre.returncode == 0 and 'arm64' in (pre.stdout or ''):
+            log(f'  ✓ 中转镜像已就绪 (多平台): {ref}，跳过复制', 'SUCCESS')
+            mapping[arg_name] = ref
+            continue
         # 镜像源路径: 官方 library 镜像需补 library/ 前缀
         mirror_src = f'docker.m.daocloud.io/library/{src}' if '/' not in src \
             else f'docker.m.daocloud.io/{src}'

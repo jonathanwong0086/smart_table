@@ -28,10 +28,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:-}
 
       # Redis 配置（内嵌 Redis，连接本地）
-      REDIS_URL: redis://localhost:6379/0
+      REDIS_URL: redis://127.0.0.1:6379/0
       REDIS_HOST: localhost
       REDIS_PORT: 6379
-      SOCKETIO_MESSAGE_QUEUE: redis://localhost:6379/2
+      SOCKETIO_MESSAGE_QUEUE: redis://127.0.0.1:6379/2
 
       # 上传配置
       UPLOAD_FOLDER: /app/uploads

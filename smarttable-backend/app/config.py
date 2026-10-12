@@ -146,7 +146,7 @@ class Config:
     OPEN_API_RATE_LIMIT = os.environ.get('OPEN_API_RATE_LIMIT', '600/minute')
 
     # Redis 配置
-    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://127.0.0.1:6379/0'
     
     # 缓存配置
     CACHE_TYPE = 'RedisCache'
@@ -203,7 +203,7 @@ class Config:
     REALTIME_ENABLED = os.environ.get('ENABLE_REALTIME', '').lower() == 'true'
 
     # SocketIO 配置
-    SOCKETIO_MESSAGE_QUEUE = os.environ.get('SOCKETIO_MESSAGE_QUEUE') or 'redis://localhost:6379/2'
+    SOCKETIO_MESSAGE_QUEUE = os.environ.get('SOCKETIO_MESSAGE_QUEUE') or 'redis://127.0.0.1:6379/2'
     SOCKETIO_PING_TIMEOUT = int(os.environ.get('SOCKETIO_PING_TIMEOUT', 60))
     SOCKETIO_PING_INTERVAL = int(os.environ.get('SOCKETIO_PING_INTERVAL', 25))
 
