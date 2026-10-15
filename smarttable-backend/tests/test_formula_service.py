@@ -808,6 +808,16 @@ class TestColumnReferences:
         result = self._eval('SUM([销售表].[price])')
         assert result == 600
 
+    def test_unique_over_column(self):
+        """UNIQUE 整列去重：name=[A,B,A] → [A,B]（须展平嵌套数组）"""
+        result = self._eval('UNIQUE([销售表].[name])')
+        assert result == ['A', 'B']
+
+    def test_counta_unique_over_column(self):
+        """回归：COUNTA(UNIQUE(整列)) 须返回去重数 2 而非总行数 3（UNIQUE 需展平数组）"""
+        result = self._eval('COUNTA(UNIQUE([销售表].[name]))')
+        assert result == 2
+
     def test_countif_string_criteria(self):
         """COUNTIF 字符串条件（数值比较）"""
         result = self._eval('COUNTIF([销售表].[price], ">100")')

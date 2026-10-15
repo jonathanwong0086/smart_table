@@ -1575,10 +1575,10 @@ def fn_rank(args: List[Any]) -> int:
 
 @FormulaEvaluator.register('UNIQUE')
 def fn_unique(args: List[Any]) -> List[Any]:
-    """去重"""
+    """去重（展平嵌套数组后去重，与前端 flattenValues 语义一致）"""
     seen = set()
     result = []
-    for val in args:
+    for val in _flatten_values(args):
         key = json.dumps(val, sort_keys=True, default=str) if not isinstance(val, (str, int, float, bool, type(None))) else val
         if key not in seen:
             seen.add(key)
