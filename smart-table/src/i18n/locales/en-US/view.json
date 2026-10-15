@@ -541,6 +541,8 @@
     "download": "Download",
     "fullscreen": "Full Screen",
     "exitFullscreen": "Exit Full Screen",
+    "prevImage": "Previous image",
+    "nextImage": "Next image",
     "pdfRotate": "Rotate",
     "pdfPrevPage": "Previous",
     "pdfNextPage": "Next",

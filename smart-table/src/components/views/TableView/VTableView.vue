@@ -54,7 +54,7 @@ import type { IEditor, EditContext, RectProps } from '@visactor/vtable-editors';
 // 导入 VTable 搜索组件
 import { SearchComponent } from '@visactor/vtable-search';
 // 导入 Element Plus 图标
-import { Search, Loading } from '@element-plus/icons-vue';
+import { Search, Loading, ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
 // 导入 ContextMenu 组件
 import ContextMenu from "@/components/common/ContextMenu.vue";
 // 导入字段属性对话框
@@ -294,10 +294,33 @@ const attachmentManagerOriginalRecord = ref<any>(null);
 // 记录触发浮窗的单元格坐标，用于滚动实时同步位置
 const lastAttachmentCellCoords = ref<{ col: number; row: number } | null>(null);
 
-// 图片缩略图单击预览状态
+// 图片缩略图单击预览状态（含上一张/下一张导航，仅遍历当前单元格内的图片）
 const attachmentImagePreviewVisible = ref(false);
-const attachmentImagePreviewUrl = ref('');
-const attachmentImagePreviewName = ref('');
+const attachmentImagePreviewFiles = ref<{ url: string; name: string }[]>([]);
+const attachmentImagePreviewIndex = ref(0);
+const attachmentImagePreviewUrl = computed(() => attachmentImagePreviewFiles.value[attachmentImagePreviewIndex.value]?.url || '');
+const attachmentImagePreviewName = computed(() => attachmentImagePreviewFiles.value[attachmentImagePreviewIndex.value]?.name || '');
+const attachmentImagePreviewHasNav = computed(() => attachmentImagePreviewFiles.value.length > 1);
+
+// 单元格图片预览：上一张/下一张循环切换
+function showPrevAttachmentImage() {
+  const len = attachmentImagePreviewFiles.value.length;
+  if (len < 2) return;
+  attachmentImagePreviewIndex.value = (attachmentImagePreviewIndex.value - 1 + len) % len;
+}
+
+function showNextAttachmentImage() {
+  const len = attachmentImagePreviewFiles.value.length;
+  if (len < 2) return;
+  attachmentImagePreviewIndex.value = (attachmentImagePreviewIndex.value + 1) % len;
+}
+
+// 键盘导航：仅单元格图片预览打开时响应左右方向键
+function handleAttachmentImageKeydown(e: KeyboardEvent) {
+  if (!attachmentImagePreviewVisible.value) return;
+  if (e.key === 'ArrowLeft') showPrevAttachmentImage();
+  else if (e.key === 'ArrowRight') showNextAttachmentImage();
+}
 
 // ==================== 关联记录选择器状态 ====================
 const linkSelectorVisible = ref(false);
@@ -4363,8 +4386,13 @@ const enhanceSubTableColumns = (columns: any[], targetFields: any[]): any[] => {
                 img.addEventListener('pointerdown', (e: any) => { e.stopPropagation?.(); });
                 img.addEventListener('pointertap', (e: any) => {
                   e.stopPropagation?.();
-                  attachmentImagePreviewUrl.value = fileUrl;
-                  attachmentImagePreviewName.value = fileName;
+                  // 收集当前单元格内全部图片（按附件顺序），从被点击图片开始预览
+                  const imageFiles = files
+                    .filter((f: any) => isImageFile(f.name || '') && (f.url || f.thumbnail || f.preview))
+                    .map((f: any) => ({ url: f.url || f.thumbnail || f.preview, name: f.name || '' }));
+                  const idx = imageFiles.findIndex(im => im.url === fileUrl && im.name === fileName);
+                  attachmentImagePreviewFiles.value = imageFiles;
+                  attachmentImagePreviewIndex.value = idx >= 0 ? idx : 0;
                   attachmentImagePreviewVisible.value = true;
                 });
                 const itemGroup = createGroup({ width: itemSize + gap, height: itemSize, display: 'flex', alignItems: 'center' });
@@ -5226,8 +5254,13 @@ const buildTableConfig = (): any => {
               });
               img.addEventListener('pointertap', (e: any) => {
                 e.stopPropagation?.();
-                attachmentImagePreviewUrl.value = fileUrl;
-                attachmentImagePreviewName.value = fileName;
+                // 收集当前单元格内全部图片（按附件顺序），从被点击图片开始预览
+                const imageFiles = files
+                  .filter((f: any) => isImageFile(f.name || '') && (f.url || f.thumbnail || f.preview))
+                  .map((f: any) => ({ url: f.url || f.thumbnail || f.preview, name: f.name || '' }));
+                const idx = imageFiles.findIndex(im => im.url === fileUrl && im.name === fileName);
+                attachmentImagePreviewFiles.value = imageFiles;
+                attachmentImagePreviewIndex.value = idx >= 0 ? idx : 0;
                 attachmentImagePreviewVisible.value = true;
               });
               const itemGroup = createGroup({
@@ -6956,6 +6989,7 @@ onMounted(() => {
   initTable();
   setupRealtimeListeners();
   document.addEventListener('click', handleDocumentClick);
+  document.addEventListener('keydown', handleAttachmentImageKeydown);
   window.addEventListener('resize', handleFloatingPanelWindowResize);
   // 树形视图的 "+" 按钮用 fixed 定位，页面或表格滚动后不会跟随，
   // 滚动时先隐藏，鼠标移动后会按新的行位置重新显示
@@ -6985,6 +7019,7 @@ onBeforeUnmount(() => {
   // 清理主从表
   disposeMasterDetail();
   document.removeEventListener('click', handleDocumentClick);
+  document.removeEventListener('keydown', handleAttachmentImageKeydown);
   window.removeEventListener('resize', handleFloatingPanelWindowResize);
   window.removeEventListener('scroll', hideTreeAddChildIconOnScroll, true);
   tableContainerRef.value?.removeEventListener('wheel', hideTreeAddChildIconOnScroll, {
@@ -7684,6 +7719,20 @@ watch(
           class="attachment-image-preview-img"
           :alt="attachmentImagePreviewName"
         />
+        <!-- 上一张/下一张导航按钮 -->
+        <template v-if="attachmentImagePreviewHasNav">
+          <el-tooltip :content="t('view.attachment.prevImage')" placement="top">
+            <button class="image-nav-btn is-prev" type="button" @click.stop="showPrevAttachmentImage">
+              <el-icon><ArrowLeft /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="t('view.attachment.nextImage')" placement="top">
+            <button class="image-nav-btn is-next" type="button" @click.stop="showNextAttachmentImage">
+              <el-icon><ArrowRight /></el-icon>
+            </button>
+          </el-tooltip>
+        </template>
+        <span v-if="attachmentImagePreviewHasNav" class="image-counter">{{ attachmentImagePreviewIndex + 1 }} / {{ attachmentImagePreviewFiles.length }}</span>
       </div>
     </el-dialog>
 
@@ -7948,6 +7997,55 @@ watch(
 .attachment-image-preview-dialog.el-dialog {
   .el-dialog__body {
     padding: 0;
+  }
+}
+
+// 图片预览导航按钮与计数（弹窗 teleport 到 body，需要非 scoped 样式）
+.attachment-image-preview-content {
+  position: relative;
+
+  .image-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    padding: 0;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.35);
+    }
+
+    &.is-prev {
+      left: 24px;
+    }
+
+    &.is-next {
+      right: 24px;
+    }
+  }
+
+  .image-counter {
+    position: absolute;
+    top: 12px;
+    right: 24px;
+    z-index: 2;
+    padding: 4px 12px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 12px;
   }
 }
 

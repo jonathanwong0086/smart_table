@@ -18,7 +18,9 @@ import {
   ZoomOut,
   RefreshRight,
   Close,
-  FullScreen
+  FullScreen,
+  ArrowLeft,
+  ArrowRight
 } from '@element-plus/icons-vue';
 import type { FieldEntity } from '@/db/schema';
 import type { CellValue } from '@/types';
@@ -54,6 +56,10 @@ const uploadProgress = ref(0);
 const currentUploadFile = ref('');
 const previewVisible = ref(false);
 const previewFile = ref<AttachmentFile | null>(null);
+// 多图导航：图片列表与当前预览索引
+const previewIndex = ref(0);
+const previewImages = computed(() => files.value.filter(f => isImageFile(f)));
+const hasMultipleImages = computed(() => previewImages.value.length > 1);
 // 记录传入的 modelValue 是否为 ID 字符串数组，删除时保持相同格式回传
 const modelValueIsIdArray = ref(false);
 
@@ -358,11 +364,8 @@ async function handleDownload(file: AttachmentFile) {
   }
 }
 
-// 处理预览
-async function handlePreview(file: AttachmentFile) {
-  previewFile.value = file;
-  previewVisible.value = true;
-
+// 确保图片/视频有原图 URL（高清预览），缺失时异步补齐
+async function ensureImageUrl(file: AttachmentFile) {
   if ((isImageFile(file) || isVideoFile(file)) && !file.url) {
     try {
       const url = await attachmentService.getAttachmentUrl(file.id);
@@ -371,6 +374,41 @@ async function handlePreview(file: AttachmentFile) {
       console.error('获取预览 URL 失败:', error);
     }
   }
+}
+
+// 处理预览
+async function handlePreview(file: AttachmentFile) {
+  previewFile.value = file;
+  previewVisible.value = true;
+
+  // 记录当前图片在图片列表中的位置，用于上一张/下一张导航
+  const idx = previewImages.value.findIndex(f => f.id === file.id);
+  previewIndex.value = idx >= 0 ? idx : 0;
+
+  await ensureImageUrl(file);
+}
+
+// 上一张/下一张（仅图片之间循环切换）
+function showPrevImage() {
+  const len = previewImages.value.length;
+  if (len < 2) return;
+  switchPreviewImage((previewIndex.value - 1 + len) % len);
+}
+
+function showNextImage() {
+  const len = previewImages.value.length;
+  if (len < 2) return;
+  switchPreviewImage((previewIndex.value + 1) % len);
+}
+
+function switchPreviewImage(index: number) {
+  const target = previewImages.value[index];
+  if (!target) return;
+  isDragging.value = false;
+  previewFile.value = target;
+  previewIndex.value = index;
+  initPreview();
+  ensureImageUrl(target);
 }
 
 // 判断是否可以预览（图片/视频/音频）
@@ -421,10 +459,16 @@ function closePanel() {
   emit('close');
 }
 
-// 处理 Escape 键
+// 处理 Escape 键与图片预览键盘导航
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     closePanel();
+    return;
+  }
+  // 左右方向键：仅图片预览时响应
+  if (previewVisible.value && previewFile.value && isImageFile(previewFile.value)) {
+    if (e.key === 'ArrowLeft') showPrevImage();
+    else if (e.key === 'ArrowRight') showNextImage();
   }
 }
 
@@ -584,6 +628,7 @@ onUnmounted(() => {
       top="5vh"
       fullscreen
       destroy-on-close
+      append-to-body
       class="attachment-preview-dialog"
       @opened="initPreview"
     >
@@ -601,8 +646,22 @@ onUnmounted(() => {
               @mouseup="stopImageDrag"
               @mouseleave="stopImageDrag"
             />
+            <!-- 上一张/下一张导航按钮 -->
+            <template v-if="hasMultipleImages">
+              <el-tooltip :content="t('view.attachment.prevImage')" placement="top">
+                <button class="image-nav-btn is-prev" type="button" @click.stop="showPrevImage">
+                  <el-icon><ArrowLeft /></el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip :content="t('view.attachment.nextImage')" placement="top">
+                <button class="image-nav-btn is-next" type="button" @click.stop="showNextImage">
+                  <el-icon><ArrowRight /></el-icon>
+                </button>
+              </el-tooltip>
+            </template>
           </div>
           <div class="preview-toolbar">
+            <span v-if="hasMultipleImages" class="image-counter">{{ previewIndex + 1 }} / {{ previewImages.length }}</span>
             <el-button-group>
               <el-button size="small" @click="zoomOut">
                 <el-icon><ZoomOut /></el-icon>
@@ -943,6 +1002,7 @@ onUnmounted(() => {
 
 .image-preview-wrapper {
   flex: 1;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -959,6 +1019,46 @@ onUnmounted(() => {
     transition: transform 0.1s ease;
     user-select: none;
   }
+}
+
+// 图片导航按钮
+.image-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  padding: 0;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+  }
+
+  &.is-prev {
+    left: $spacing-lg;
+  }
+
+  &.is-next {
+    right: $spacing-lg;
+  }
+}
+
+.image-counter {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  min-width: 48px;
+  text-align: center;
 }
 
 .image-preview-wrapper:fullscreen {
