@@ -1586,6 +1586,7 @@ async function handleCopyBase(base: Base, event: Event) {
       v-model="createDialogVisible"
       :title="t('base.createTitle')"
       width="480px"
+      append-to-body
       :close-on-click-modal="false"
       class="create-dialog">
       <el-form
@@ -1649,6 +1650,7 @@ async function handleCopyBase(base: Base, event: Event) {
       v-model="editDialogVisible"
       :title="t('base.editTitle')"
       width="480px"
+      append-to-body
       :close-on-click-modal="false"
       class="create-dialog">
       <el-form
