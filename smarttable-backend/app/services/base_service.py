@@ -4,6 +4,7 @@
 """
 from typing import List, Optional, Dict, Any
 import uuid
+import threading
 from datetime import datetime, timezone
 
 from flask import current_app
@@ -483,9 +484,187 @@ class BaseService:
             'success': True,
             'member': membership.to_dict(include_user=True)
         }
-    
+
+    @staticmethod
+    def transfer_ownership(base_id: str, current_user_id: str,
+                           target_user_id: str,
+                           former_owner_role: Optional[str] = None) -> Dict[str, Any]:
+        """
+        转移基础数据所有权
+
+        将 Base 所有权转移给目标用户，并按 former_owner_role 处理原所有者的权限：
+        - 指定角色（admin/editor/commenter/viewer）：原所有者降级为该角色成员
+        - None：移除原所有者的协作权限（删除成员关系）
+
+        Args:
+            base_id: 基础数据 ID
+            current_user_id: 当前操作用户 ID（必须为所有者）
+            target_user_id: 目标用户 ID
+            former_owner_role: 原所有者转移后的角色，None 表示不保留协作权限
+
+        Returns:
+            包含操作结果的字典
+        """
+        base = Base.query.get(base_id)
+        if not base:
+            return {'success': False, 'error': 'base_not_exist'}
+
+        # 仅所有者可以转移
+        if str(base.owner_id) != str(current_user_id):
+            return {'success': False, 'error': 'only_owner_can_transfer'}
+
+        # 不能转移给自己
+        if str(target_user_id) == str(current_user_id):
+            return {'success': False, 'error': 'cannot_transfer_to_self'}
+
+        # 目标用户必须存在
+        target_user = User.query.get(target_user_id)
+        if not target_user:
+            return {'success': False, 'error': 'user_does_not_exist'}
+
+        # 校验原所有者保留角色
+        keep_role = None
+        if former_owner_role is not None and str(former_owner_role).strip() != '':
+            try:
+                keep_role = MemberRole(str(former_owner_role).strip().lower())
+            except ValueError:
+                return {'success': False, 'error': 'invalid_role_type'}
+            if keep_role == MemberRole.OWNER:
+                return {'success': False, 'error': 'invalid_role_type'}
+
+        old_owner = User.query.get(current_user_id)
+
+        try:
+            # 1. 变更所有者
+            base.owner_id = target_user_id
+
+            # 2. 目标用户成员行 upsert（非成员时自动创建 owner 行）
+            target_membership = BaseMember.query.filter_by(
+                base_id=base_id,
+                user_id=target_user_id
+            ).first()
+            if target_membership:
+                target_membership.role = MemberRole.OWNER
+            else:
+                db.session.add(BaseMember(
+                    base_id=base_id,
+                    user_id=target_user_id,
+                    role=MemberRole.OWNER,
+                    invited_by=current_user_id
+                ))
+
+            # 3. 原所有者成员行处理
+            old_membership = BaseMember.query.filter_by(
+                base_id=base_id,
+                user_id=current_user_id
+            ).first()
+            if keep_role is not None:
+                if old_membership:
+                    old_membership.role = keep_role
+                else:
+                    db.session.add(BaseMember(
+                        base_id=base_id,
+                        user_id=current_user_id,
+                        role=keep_role,
+                        invited_by=target_user_id
+                    ))
+            else:
+                if old_membership:
+                    db.session.delete(old_membership)
+
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'[BaseService] 转移所有权失败: {str(e)}')
+            return {'success': False, 'error': 'transfer_ownership_failed'}
+
+        current_app.logger.info(
+            f'[BaseService] 所有权转移成功: base={base_id}, '
+            f'{current_user_id} -> {target_user_id}, keep_role={keep_role.value if keep_role else None}'
+        )
+
+        # 4. 后台线程发送通知（站内信先于邮件，邮件不可用时站内信仍独立工作）；
+        # SMTP 同步发送可能耗时数秒到数十秒，异步化避免阻塞转移接口响应
+        base_link = f"{EmailConfigService.get_frontend_url()}/base/{base_id}"
+        permission_map = {
+            'owner': '所有者',
+            'admin': '管理员',
+            'editor': '编辑者',
+            'commenter': '评论者',
+            'viewer': '查看者'
+        }
+        operation_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        old_owner_name = old_owner.name if old_owner else '原所有者'
+        target_user_name = target_user.name
+        notify_app = current_app._get_current_object()
+        notify_base_name = base.name
+
+        def _send_transfer_notifications():
+            try:
+                with notify_app.app_context():
+                    try:
+                        NotificationService.send_notification(
+                            recipient_user_id=target_user_id,
+                            template_key='base_ownership_transferred',
+                            template_data={
+                                'user_name': target_user_name,
+                                'base_name': notify_base_name,
+                                'old_owner_name': old_owner_name,
+                                'operation_time': operation_time,
+                                'base_link': base_link
+                            },
+                            source='system'
+                        )
+                    except Exception as e:
+                        notify_app.logger.error(f'发送所有权转移通知失败: {str(e)}')
+
+                    try:
+                        if keep_role is not None:
+                            NotificationService.send_notification(
+                                recipient_user_id=current_user_id,
+                                template_key='permission_changed',
+                                template_data={
+                                    'user_name': old_owner_name,
+                                    'base_name': notify_base_name,
+                                    'old_permission': permission_map.get('owner', 'owner'),
+                                    'new_permission': permission_map.get(keep_role.value, keep_role.value),
+                                    'operation_time': operation_time,
+                                    'operator_name': old_owner_name,
+                                    'base_link': base_link
+                                },
+                                source='system'
+                            )
+                        else:
+                            NotificationService.send_notification(
+                                recipient_user_id=current_user_id,
+                                template_key='share_removed',
+                                template_data={
+                                    'user_name': old_owner_name,
+                                    'base_name': notify_base_name,
+                                    'operation_time': operation_time,
+                                    'operator_name': old_owner_name
+                                },
+                                source='system'
+                            )
+                    except Exception as e:
+                        notify_app.logger.error(f'发送原所有者权限变更通知失败: {str(e)}')
+            except Exception as e:
+                import logging
+                logging.error(f'所有权转移通知后台任务异常: {str(e)}')
+
+        threading.Thread(
+            target=_send_transfer_notifications,
+            name='base-transfer-ownership-notify',
+            daemon=True
+        ).start()
+
+        return {
+            'success': True,
+            'base': base.to_dict()
+        }
+
     @classmethod
-    def check_permission(cls, base_id: str, user_id: str, 
+    def check_permission(cls, base_id: str, user_id: str,
                          min_role: MemberRole = MemberRole.VIEWER) -> bool:
         """
         检查用户权限

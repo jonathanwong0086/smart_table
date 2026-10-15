@@ -47,6 +47,15 @@
             <el-tag v-else type="warning" size="small">{{ t('view.member.owner') }}</el-tag>
 
             <el-button
+              v-if="member.role === 'owner' && isCurrentUserOwner"
+              type="primary"
+              size="small"
+              text
+              @click="openTransferDialog">
+              {{ t('view.member.transferOwnership') }}
+            </el-button>
+
+            <el-button
               v-if="member.role !== 'owner' && canManageMembers"
               type="danger"
               size="small"
@@ -124,6 +133,67 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <!-- 转移所有权对话框 -->
+  <el-dialog
+    v-model="showTransferDialog"
+    :title="t('view.member.transferTitle')"
+    width="480px"
+    append-to-body
+    :close-on-click-modal="false">
+    <div class="transfer-form">
+      <div class="transfer-field">
+        <div class="transfer-label">{{ t('view.member.transferTo') }}</div>
+        <MemberSelect
+          v-model="transferForm.target"
+          :return-object="true"
+          :placeholder="t('view.member.transferSearchPlaceholder')" />
+      </div>
+
+      <div class="transfer-field">
+        <div class="transfer-label">{{ t('view.member.transferAfter') }}</div>
+        <el-radio-group v-model="transferForm.mode" class="transfer-radio-group">
+          <div class="transfer-option">
+            <el-radio value="keep">
+              <span class="transfer-keep-line">
+                {{ t('view.member.transferKeepMyRole') }}
+                <el-select
+                  v-model="transferForm.keepRole"
+                  size="small"
+                  class="transfer-role-select"
+                  :disabled="transferForm.mode !== 'keep'">
+                  <el-option :label="t('view.member.roleAdmin')" value="admin" />
+                  <el-option :label="t('view.member.roleEditor')" value="editor" />
+                  <el-option :label="t('view.member.roleCommenter')" value="commenter" />
+                  <el-option :label="t('view.member.roleViewer')" value="viewer" />
+                </el-select>
+                {{ t('view.member.transferRoleSuffix') }}
+              </span>
+            </el-radio>
+          </div>
+          <div class="transfer-option">
+            <el-radio value="remove">{{ t('view.member.transferRemoveMyAccess') }}</el-radio>
+          </div>
+        </el-radio-group>
+      </div>
+
+      <div class="transfer-field">
+        <div class="transfer-label">{{ t('view.member.transferBaseName') }}</div>
+        <div class="transfer-base-name">{{ currentBaseName }}</div>
+      </div>
+    </div>
+
+    <template #footer>
+      <el-button @click="showTransferDialog = false">{{ t('view.cancel') }}</el-button>
+      <el-button
+        type="primary"
+        :loading="transferring"
+        :disabled="transferForm.target.length === 0"
+        @click="handleTransferOwnership">
+        {{ t('view.member.transferConfirm') }}
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -134,6 +204,8 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Plus } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
 import { useMemberStore, type BaseMember } from "@/stores/memberStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useBaseStore } from "@/stores/baseStore";
 import MemberSelect, { type Member } from "@/components/common/MemberSelect.vue";
 
 const { t } = useI18n();
@@ -149,6 +221,8 @@ const emit = defineEmits<{
 }>();
 
 const memberStore = useMemberStore();
+const authStore = useAuthStore();
+const baseStore = useBaseStore();
 
 const dialogVisible = computed({
   get: () => props.visible,
@@ -170,6 +244,20 @@ const addMemberForm = reactive({
   member: [] as Member[],
   role: "editor",
 });
+
+// 转移所有权状态
+const showTransferDialog = ref(false);
+const transferring = ref(false);
+const transferForm = reactive({
+  // MemberSelect（returnObject 单选）返回 0/1 个 Member 对象的数组
+  target: [] as Member[],
+  // keep: 保留我的协作权限；remove: 不保留
+  mode: "keep" as "keep" | "remove",
+  keepRole: "admin",
+});
+
+const isCurrentUserOwner = computed(() => memberStore.isOwner);
+const currentBaseName = computed(() => baseStore.currentBase?.name || "");
 
 const addMemberFormRules: FormRules = {
   member: [
@@ -249,6 +337,56 @@ async function handleRemoveMember(member: BaseMember) {
       console.error("移除成员失败:", error);
       ElMessage.error(t('view.member.removeMemberFailed'));
     }
+  }
+}
+
+// 打开转移所有权对话框
+function openTransferDialog() {
+  transferForm.target = [];
+  transferForm.mode = "keep";
+  transferForm.keepRole = "admin";
+  showTransferDialog.value = true;
+}
+
+// 处理转移所有权
+async function handleTransferOwnership() {
+  const target = transferForm.target[0];
+  if (!target) return;
+
+  // 不能转移给自己
+  if (authStore.user?.id === target.id) {
+    ElMessage.warning(t("view.member.transferToSelfForbidden"));
+    return;
+  }
+
+  transferring.value = true;
+  try {
+    await memberStore.transferOwnership(
+      props.baseId,
+      target.id,
+      transferForm.mode === "keep" ? transferForm.keepRole : null,
+    );
+    ElMessage.success(t("view.member.transferSuccess"));
+    showTransferDialog.value = false;
+
+    // 同步 baseStore 缓存的所有者信息
+    if (baseStore.currentBase?.id === props.baseId) {
+      baseStore.currentBase.owner_id = target.id;
+    }
+    emit("member-changed");
+
+    if (transferForm.mode === "remove") {
+      // 不保留协作权限：当前用户已失去该 Base 的成员身份，
+      // 无法再查看成员列表（接口会 403），直接关闭成员管理弹窗
+      memberStore.clearMembers();
+      dialogVisible.value = false;
+    }
+    // 保留角色场景：memberStore.transferOwnership 内部已刷新成员列表
+  } catch (error) {
+    console.error("转移所有权失败:", error);
+    ElMessage.error(t("view.member.transferFailed"));
+  } finally {
+    transferring.value = false;
   }
 }
 
@@ -439,6 +577,64 @@ function closeDialog() {
     padding-top: 24px;
     border-top: 1px solid #e5e7eb;
     text-align: right;
+  }
+}
+
+.transfer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  .transfer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .transfer-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .transfer-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+
+    .transfer-option {
+      display: flex;
+      align-items: center;
+
+      .el-radio {
+        height: auto;
+        margin-right: 0;
+      }
+    }
+  }
+
+  .transfer-keep-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .transfer-role-select {
+    width: 110px;
+  }
+
+  .transfer-base-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #374151;
+    width: fit-content;
   }
 }
 </style>

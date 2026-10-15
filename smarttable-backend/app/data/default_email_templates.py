@@ -685,6 +685,74 @@ PERMISSION_CHANGED_TEMPLATE = {
     "is_default": True
 }
 
+# 所有权转移通知模板
+BASE_OWNERSHIP_TRANSFERRED_TEMPLATE = {
+    "template_key": "base_ownership_transferred",
+    "name": "多维表所有权转移通知",
+    "subject": "Smart Table - {{old_owner_name}} 已将多维表 {{base_name}} 的所有权转移给您",
+    "content_html": """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>所有权转移通知</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 24px; }
+        .content { padding: 40px 30px; }
+        .content p { color: #666666; line-height: 1.6; margin-bottom: 20px; }
+        .info-box { background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; }
+        .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 500; margin: 20px 0; }
+        .footer { padding: 20px 30px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center; color: #999999; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>所有权已转移给您</h1>
+        </div>
+        <div class="content">
+            <p>您好，{{user_name}}！</p>
+            <p><strong>{{old_owner_name}}</strong> 已将多维表 <strong>{{base_name}}</strong> 的所有权转移给您。</p>
+            <div class="info-box">
+                <p><strong>转移时间：</strong>{{operation_time}}</p>
+                <p><strong>原所有者：</strong>{{old_owner_name}}</p>
+            </div>
+            <p>您现在是该多维表的所有者，可以在成员管理中对协作者进行管理，也可以再次转移所有权。</p>
+            <p style="text-align: center;">
+                <a href="{{base_link}}" class="button">查看多维表</a>
+            </p>
+        </div>
+        <div class="footer">
+            <p>此邮件由 Smart Table 系统自动发送，请勿回复。</p>
+        </div>
+    </div>
+</body>
+</html>
+""",
+    "content_text": """
+多维表所有权转移通知
+
+您好，{{user_name}}！
+
+{{old_owner_name}} 已将多维表 {{base_name}} 的所有权转移给您。
+
+转移时间：{{operation_time}}
+原所有者：{{old_owner_name}}
+
+您现在是该多维表的所有者，可以在成员管理中对协作者进行管理，也可以再次转移所有权。
+
+查看多维表：{{base_link}}
+
+---
+此邮件由 Smart Table 系统自动发送，请勿回复。
+""",
+    "description": "转移多维表所有权时发送给新所有者的通知",
+    "is_default": True
+}
+
 # 所有默认模板列表
 DEFAULT_EMAIL_TEMPLATES = [
     USER_REGISTRATION_TEMPLATE,
@@ -697,4 +765,5 @@ DEFAULT_EMAIL_TEMPLATES = [
     SHARE_INVITATION_TEMPLATE,
     SHARE_REMOVED_TEMPLATE,
     PERMISSION_CHANGED_TEMPLATE,
+    BASE_OWNERSHIP_TRANSFERRED_TEMPLATE,
 ]

@@ -150,6 +150,38 @@ export const useMemberStore = defineStore("member", () => {
     }
   }
 
+  async function transferOwnership(
+    baseId: string,
+    targetUserId: string,
+    formerOwnerRole: string | null
+  ) {
+    loading.value = true;
+    try {
+      await shareApiService.transferOwnership(baseId, targetUserId, formerOwnerRole);
+      // 同步所有者判定
+      currentBaseOwnerId.value = targetUserId;
+
+      if (formerOwnerRole !== null) {
+        // 保留角色：当前用户仍是成员，刷新成员列表反映新的角色关系；
+        // 刷新失败不应误判为转移失败
+        try {
+          await fetchMembers(baseId);
+        } catch (refreshErr) {
+          console.error("[memberStore] transferOwnership: refresh members failed:", refreshErr);
+        }
+      }
+      // formerOwnerRole === null（不保留协作权限）：当前用户已失去成员身份，
+      // 成员列表接口会返回 403，跳过刷新
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('common.member.transferFailed');
+      error.value = msg;
+      console.error("[memberStore] transferOwnership failed:", e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   function clearMembers() {
     members.value = [];
     currentBaseOwnerId.value = null;
@@ -181,6 +213,7 @@ export const useMemberStore = defineStore("member", () => {
     batchAddMembers,
     updateMemberRole,
     removeMember,
+    transferOwnership,
     clearMembers,
     clearError,
     $reset,

@@ -592,7 +592,20 @@
     "noValidEmail": "没有有效的邮箱地址",
     "batchAddDone": "批量添加完成：成功 {success} 个，失败 {failed} 个",
     "batchAddFailedDetail": "失败详情：",
-    "batchAddFailed": "批量添加失败，请检查邮箱地址格式"
+    "batchAddFailed": "批量添加失败，请检查邮箱地址格式",
+    "transferOwnership": "转移所有权",
+    "transferTitle": "转移所有权",
+    "transferTo": "转移给",
+    "transferSearchPlaceholder": "输入用户姓名查找账号",
+    "transferAfter": "转移后",
+    "transferKeepMyRole": "保留我的",
+    "transferRoleSuffix": "权限",
+    "transferRemoveMyAccess": "不保留我的协作权限",
+    "transferBaseName": "名称",
+    "transferConfirm": "转移",
+    "transferSuccess": "所有权已转移",
+    "transferFailed": "转移所有权失败",
+    "transferToSelfForbidden": "不能将所有权转移给自己"
   },
   "share": {
     "shareBaseTitle": "分享多维表Base",

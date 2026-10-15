@@ -327,6 +327,26 @@ MESSAGES = {
         'zh-CN': '无权访问该 Base',
         'en-US': 'No permission to access this base',
     },
+    'only_owner_can_transfer': {
+        'zh-CN': '只有所有者才能转移所有权',
+        'en-US': 'Only the owner can transfer ownership',
+    },
+    'cannot_transfer_to_self': {
+        'zh-CN': '不能将所有权转移给自己',
+        'en-US': 'Cannot transfer ownership to yourself',
+    },
+    'specify_ownership_transfer_target_user': {
+        'zh-CN': '请指定所有权转移的目标用户',
+        'en-US': 'Please specify the target user for ownership transfer',
+    },
+    'transfer_ownership_failed': {
+        'zh-CN': '转移所有权失败',
+        'en-US': 'Failed to transfer ownership',
+    },
+    'base_ownership_transferred_successfully': {
+        'zh-CN': '所有权转移成功',
+        'en-US': 'Ownership transferred successfully',
+    },
     'no_permission_access_table': {
         'zh-CN': '无权访问该表格',
         'en-US': 'No permission to access this table',

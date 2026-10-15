@@ -121,7 +121,8 @@
     "addFailed": "添加成员失败",
     "batchAddFailed": "批量添加成员失败",
     "updateRoleFailed": "更新成员角色失败",
-    "removeFailed": "移除成员失败"
+    "removeFailed": "移除成员失败",
+    "transferFailed": "转移所有权失败"
   },
   "base": {
     "fetchListFailed": "获取 Base 列表失败",

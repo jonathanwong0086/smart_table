@@ -695,8 +695,75 @@ def remove_member(base_id, user_id) -> tuple:
     success = BaseService.remove_member(str(base_id), str(user_id), removed_by=str(current_user_id))
     if not success:
         return error_response('member_does_not_exist_removal_failed', code=400)
-    
+
     return success_response(message='member_removed_successfully')
+
+
+@bases_bp.route('/<uuid:base_id>/transfer-ownership', methods=['POST'])
+@jwt_required
+def transfer_ownership(base_id) -> tuple:
+    """
+    转移基础数据所有权
+    ---
+    tags:
+      - Bases
+    security:
+      - Bearer: []
+    parameters:
+      - name: base_id
+        in: path
+        type: string
+        required: true
+        description: 基础数据 ID
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - user_id
+          properties:
+            user_id:
+              type: string
+              description: 目标用户 ID（新所有者）
+            former_owner_role:
+              type: string
+              enum: ['admin', 'editor', 'commenter', 'viewer']
+              description: 原所有者转移后的角色（可选，缺省表示不保留协作权限）
+    responses:
+      200:
+        description: 转移成功，返回 Base 信息
+      400:
+        description: 请求参数错误（不能转移给自己、目标用户不存在等）
+      403:
+        description: 仅所有者可以转移所有权
+    """
+    current_user_id = g.current_user_id
+    data = request.get_json() or {}
+
+    target_user_id = data.get('user_id', '')
+    if not target_user_id or not str(target_user_id).strip():
+        return error_response('specify_ownership_transfer_target_user', code=400)
+
+    former_owner_role = data.get('former_owner_role', None)
+
+    result = BaseService.transfer_ownership(
+        base_id=str(base_id),
+        current_user_id=str(current_user_id),
+        target_user_id=str(target_user_id).strip(),
+        former_owner_role=former_owner_role
+    )
+
+    if not result['success']:
+        error = result['error']
+        if error == 'only_owner_can_transfer':
+            return forbidden_response(error)
+        return error_response(error, code=400)
+
+    return success_response(
+        data=result['base'],
+        message='base_ownership_transferred_successfully'
+    )
 
 
 @bases_bp.route('/<uuid:base_id>/copy', methods=['POST'])

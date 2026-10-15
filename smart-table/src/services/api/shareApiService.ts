@@ -39,6 +39,18 @@ export const shareApiService = {
     await apiClient.delete(`/bases/${baseId}/members/${userId}`);
   },
 
+  async transferOwnership(
+    baseId: string,
+    targetUserId: string,
+    formerOwnerRole: string | null
+  ): Promise<Base> {
+    const data = await apiClient.post<Base>(`/bases/${baseId}/transfer-ownership`, {
+      user_id: targetUserId,
+      former_owner_role: formerOwnerRole
+    });
+    return (data as unknown as Base) || {};
+  },
+
   async getShares(baseId: string): Promise<BaseShare[]> {
     const data = await apiClient.get<BaseShare[]>(`/bases/${baseId}/shares`);
     return (data as unknown as BaseShare[]) || [];

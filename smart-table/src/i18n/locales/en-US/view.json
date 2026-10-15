@@ -592,7 +592,20 @@
     "noValidEmail": "No valid email address",
     "batchAddDone": "Batch add done: {success} succeeded, {failed} failed",
     "batchAddFailedDetail": "Failed details:",
-    "batchAddFailed": "Batch add failed, please check email format"
+    "batchAddFailed": "Batch add failed, please check email format",
+    "transferOwnership": "Transfer Ownership",
+    "transferTitle": "Transfer Ownership",
+    "transferTo": "Transfer to",
+    "transferSearchPlaceholder": "Search account by user name",
+    "transferAfter": "After transfer",
+    "transferKeepMyRole": "Keep my",
+    "transferRoleSuffix": "permission",
+    "transferRemoveMyAccess": "Don't keep my collaboration permission",
+    "transferBaseName": "Name",
+    "transferConfirm": "Transfer",
+    "transferSuccess": "Ownership transferred",
+    "transferFailed": "Failed to transfer ownership",
+    "transferToSelfForbidden": "Cannot transfer ownership to yourself"
   },
   "share": {
     "shareBaseTitle": "Share Base",

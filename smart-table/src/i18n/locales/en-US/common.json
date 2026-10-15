@@ -121,7 +121,8 @@
     "addFailed": "Failed to add member",
     "batchAddFailed": "Failed to batch add members",
     "updateRoleFailed": "Failed to update member role",
-    "removeFailed": "Failed to remove member"
+    "removeFailed": "Failed to remove member",
+    "transferFailed": "Failed to transfer ownership"
   },
   "base": {
     "fetchListFailed": "Failed to fetch base list",
