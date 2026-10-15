@@ -147,6 +147,8 @@
   "addLinkRecord": "添加关联记录",
   "addLink": "添加关联",
   "refresh": "刷新",
+  "refreshSuccess": "表格数据已刷新",
+  "refreshFailed": "刷新失败，请稍后重试",
   "fileCount": "{count} 个文件",
   "linkUpdateFailed": "关联字段更新失败，请稍后重试",
   "linkUnlinked": "已解除关联",

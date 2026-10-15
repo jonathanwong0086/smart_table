@@ -16,6 +16,7 @@ import {
   Clock,
   Folder,
   FolderAdd,
+  Refresh,
 } from "@element-plus/icons-vue";
 import GroupedTableView from "@/components/groups/GroupedTableView.vue";
 import { TableView, VTableView } from "@/components/views/TableView";
@@ -904,6 +905,17 @@ const handleAddRecord = (
   addRecordInitialValues.value = values;
   addRecordGroupInfo.value = groupInfo || {};
   addRecordDialogVisible.value = true;
+};
+
+// 处理刷新：重新从后端加载当前表全部记录，并给出结果反馈
+const handleReloadRecords = async () => {
+  if (!tableStore.currentTable) return;
+  const ok = await tableStore.reloadRecords();
+  if (ok) {
+    ElMessage.success(t('view.refreshSuccess'));
+  } else {
+    ElMessage.error(t('view.refreshFailed'));
+  }
 };
 
 // 处理从分组表格添加记录
@@ -2196,6 +2208,14 @@ const handleDocumentExportPdf = async () => {
                 @click="handleAddRecord()">
                 <el-icon><Plus /></el-icon>
                 {{ t('view.base.addRecord') }}
+              </el-button>
+              <!-- 刷新：重新从后端加载当前表全部记录 -->
+              <el-button
+                size="default"
+                :loading="tableStore.streamingState.isLoading"
+                :title="t('view.refresh')"
+                @click="handleReloadRecords">
+                <el-icon v-if="!tableStore.streamingState.isLoading"><Refresh /></el-icon>
               </el-button>
             </div>
             <div

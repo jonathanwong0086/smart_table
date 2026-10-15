@@ -147,6 +147,8 @@
   "addLinkRecord": "Add linked record",
   "addLink": "Add Link",
   "refresh": "Refresh",
+  "refreshSuccess": "Table data refreshed",
+  "refreshFailed": "Refresh failed, please try again later",
   "fileCount": "{count} files",
   "linkUpdateFailed": "Failed to update link field, please try again later",
   "linkUnlinked": "Unlinked successfully",

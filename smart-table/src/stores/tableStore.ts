@@ -172,6 +172,69 @@ export const useTableStore = defineStore("table", () => {
     }
   }
 
+  /**
+   * 强制从后端重新加载当前表全部记录（刷新按钮）
+   * 取消进行中的加载 → 清空本地缓存（防已删除记录回流）→ 重新流式加载
+   * @returns 首屏重载是否成功（后台剩余页进度经 streamingState 上报）
+   */
+  async function reloadRecords() {
+    const tableId = currentTable.value?.id;
+    if (!tableId) return false;
+    recordService.cancelStreamingLoad(tableId);
+    streamingState.value = {
+      isLoading: false,
+      loadedCount: 0,
+      totalCount: 0,
+      currentPage: 0,
+      totalPages: 0,
+      error: null,
+    };
+    try {
+      await recordService.clearLocalRecords(tableId);
+      const { initialRecords, loadPromise } = await recordService.streamLoadRecords(
+        tableId,
+        {
+          onProgress: (state, newRecords) => {
+            streamingState.value = { ...state };
+            if (newRecords && newRecords.length > 0) {
+              records.value = [...records.value, ...newRecords];
+            }
+          },
+          onComplete: (state) => {
+            streamingState.value = { ...state };
+            refreshRecords(tableId);
+          },
+          onError: (err) => {
+            console.error("[tableStore] 重新加载记录失败:", err);
+            streamingState.value = {
+              ...streamingState.value,
+              isLoading: false,
+              error: typeof err === 'string' ? err : t('common.loadFailed'),
+            };
+            refreshRecords(tableId);
+          },
+        },
+        200,
+      );
+      records.value = initialRecords;
+      loadPromise.catch((err) => {
+        if (!err) return;
+        console.warn("[tableStore] 重新加载后台异常:", err);
+      });
+      return true;
+    } catch (e) {
+      console.error("[tableStore] reloadRecords failed:", e);
+      streamingState.value = {
+        ...streamingState.value,
+        isLoading: false,
+        error: e instanceof Error ? e.message : t('common.loadFailed'),
+      };
+      // 失败时尝试从本地恢复已加载的部分
+      refreshRecords(tableId);
+      return false;
+    }
+  }
+
   async function createTable(data: {
     baseId: string;
     name: string;
@@ -732,6 +795,7 @@ export const useTableStore = defineStore("table", () => {
     loadTables,
     selectTable,
     refreshRecords,
+    reloadRecords,
     createTable,
     updateTable,
     deleteTable,

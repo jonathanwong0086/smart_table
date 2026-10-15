@@ -244,6 +244,14 @@ export class RecordService {
   }
 
   /**
+   * 清空指定表的本地记录
+   * 用于强制后端重载前清理（saveRecordsToLocal 为合并写，不清旧数据，已删除记录会残留）
+   */
+  async clearLocalRecords(tableId: string): Promise<void> {
+    await db.records.where("tableId").equals(tableId).delete();
+  }
+
+  /**
    * 流式加载表格记录
    * 先加载第一页用于快速显示，然后后台加载剩余页面
    */
@@ -252,6 +260,9 @@ export class RecordService {
     callbacks?: StreamingLoadCallbacks,
     pageSize: number = 100,
   ): Promise<{ initialRecords: RecordEntity[]; loadPromise: Promise<void> }> {
+    // 新加载启动时清除该表残留的 cancel token（旧加载被取消后 token 无人清理，会导致新加载空转）
+    RecordService.clearCancelToken(tableId);
+
     const state: StreamingLoadState = {
       isLoading: true,
       loadedCount: 0,
