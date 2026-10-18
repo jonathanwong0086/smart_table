@@ -4,6 +4,98 @@
 
 ***
 
+# SmartTable v1.6.9 Release Notes
+
+**发布日期 / Release Date**: 2026-10-18
+
+**版本号 / Version**: v1.6.9
+
+**标签 / Tags**: `release`, `v1.6.9`, `latest`, `stable`, `formula`, `system-fields`, `attachment-preview`, `table-sharing`, `ownership-transfer`, `docker`, `redis`
+
+***
+
+## 中文版本 / Chinese Version
+
+### 🎉 SmartTable v1.6.9 更新说明
+
+本次更新聚焦 **公式字段增强**、**系统字段可配置显示**、**附件预览体验**、**数据表管理（所有权转移 / 分享 / 刷新）**及**部署稳定性**等内容。公式字段新增日期/日期时间显示格式并增加保存前校验与错误提示；新增创建人/创建时间/更新人/更新时间系统字段可配置显示；附件图片预览支持上一张/下一张导航；新增多维表所有权转移与数据表分享功能，并支持表格数据手动刷新；创建/编辑对话框优化弹出层级避免被遮挡；Docker 启动配置、ARM 架构、Redis 连接等部署问题得到修复；并修复了 UNIQUE 函数未展平嵌套数组等问题。
+
+### ✨ 新增及功能优化
+
+#### 📋 数据表管理增强
+
+- **多维表所有权转移**：新增多维表所有权转移功能，可将表的归属转交给其他成员
+- **数据表分享**：新增数据表分享功能，便于把表快速分享给他人协作
+- **表格数据刷新**：新增表格数据手动刷新功能及提示，数据更新后一键拉取最新
+
+#### 🧮 公式字段增强 ⭐
+
+- ⭐ **日期/日期时间显示格式**：公式字段新增对日期、日期时间类型的显示格式支持，可按需设置展示样式
+- ⭐ **保存前校验与错误提示**：公式字段在保存前进行校验，并给出清晰的错误提示，避免写入非法公式
+
+#### 🕒 系统字段可配置显示
+
+- **创建人/创建时间/更新人/更新时间可配置显示**：新增对创建人、创建时间、更新人、更新时间四个系统字段的显示配置，可按需配置显示展示
+
+#### 🖼️ 附件预览增强
+
+- **图片预览上一张/下一张导航**：附件图片预览支持上一张/下一张切换，连续看图更方便
+
+### 🐛 Bug 修复 (Bug Fixes)
+
+- 修复 UNIQUE 函数未展平嵌套数组导致结果不正确的问题
+- 创建和编辑对话框增加 `append-to-body`，避免被父容器遮挡或裁剪
+- 优化 Docker 容器启动默认配置，避免裸容器启动报错
+- 修正 Docker 默认配置中 `SECRET_KEY`、`JWT_SECRET_KEY` 缺失导致启动报错的问题
+- 修正 Docker 镜像在 ARM 架构下的构建/运行问题
+- Dockerfile 新增 `run.py` 兼容转发 stub，保证旧的启动方式仍可用
+- `.dockerignore` 改用 `**/` 前缀匹配子目录的 Python 缓存产物
+- 修复docker环境下 Redis 连接配置问题，提升部署稳定性
+- 修复查找字段在公式里无法执行问题
+
+---
+
+## English Version
+
+### 🎉 SmartTable v1.6.9 Release Notes
+
+This release focuses on **formula field enhancements**, **configurable system fields**, **attachment preview experience**, **data-table management (ownership transfer / sharing / refresh)**, and **deployment stability**. Formula fields gain date/date-time display formats and pre-save validation with error hints; the four system fields — creator, created time, updater, and updated time — are now configurable for display; attachment image preview supports previous/next navigation; table ownership transfer and data-table sharing are introduced, along with a manual table-data refresh; create/edit dialogs optimize their popup layering to avoid being obscured; and deployment issues around Docker startup config, ARM architecture, and Redis connection are fixed; the issue where the UNIQUE function did not flatten nested arrays is also fixed.
+
+### ✨ New Features & Improvements
+
+#### 📋 Data-Table Management Enhancements
+
+- **Table Ownership Transfer**: Added multi-table ownership transfer, allowing a table's ownership to be handed off to another member
+- **Data-Table Sharing**: Added a data-table sharing feature for quickly sharing tables with others for collaboration
+- **Table Data Refresh**: Added a manual table-data refresh action with a prompt, to pull the latest data with one click after updates
+
+#### 🧮 Formula Field Enhancements ⭐
+
+- ⭐ **Date / Date-Time Display Format**: Formula fields now support display formats for date and date-time types, with configurable presentation styles
+- ⭐ **Pre-Save Validation & Error Hints**: Formula fields are now validated before saving, with clear error messages to prevent saving invalid formulas
+
+#### 🕒 System Fields Configurable Display
+
+- **Configurable Creator/Created/Updater/Updated Fields**: Added display configuration for the four system fields — creator, created time, last updater, and updated time — so they can be shown as needed
+
+#### 🖼️ Attachment Preview Enhancements
+
+- **Prev/Next Image Navigation**: Attachment image preview now supports previous/next navigation for browsing images in sequence
+
+### 🐛 Bug Fixes
+
+- Fixed the issue where the UNIQUE function did not flatten nested arrays, producing incorrect results
+- Create and edit dialogs now use `append-to-body` to avoid being clipped or covered by parent containers
+- Optimized Docker container default startup configuration to avoid errors when starting a bare container
+- Fixed missing `SECRET_KEY` and `JWT_SECRET_KEY` in the Docker default config that caused startup failures
+- Fixed Docker image build/run issues on ARM architecture
+- Added a `run.py` compatibility forwarding stub in the Dockerfile to keep the old startup method working
+- `.dockerignore` now uses `**/` prefixes to match Python cache artifacts in subdirectories
+- Fixed the Redis connection configuration issue in the Docker environment to improve deployment stability
+- Fixed the issue where lookup fields could not be executed within formulas
+
+***
+
 # SmartTable v1.6.8 Release Notes
 
 **发布日期 / Release Date**: 2026-10-05

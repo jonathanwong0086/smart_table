@@ -104,6 +104,7 @@ data/
 
 # 上传文件
 uploads/
+smarttable-backend/uploads/
 
 # 前端构建产物
 smart-table/dist/
