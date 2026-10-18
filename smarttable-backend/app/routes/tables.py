@@ -7,6 +7,7 @@ from flask import Blueprint, request, g
 from app.services.table_service import TableService
 from app.services.table_folder_service import TableFolderService
 from app.services.base_service import BaseService
+from app.services.table_share_service import TableShareService
 from app.models.base import MemberRole
 from app.utils.decorators import jwt_required, form_share_or_jwt
 from app.utils.response import (
@@ -40,11 +41,17 @@ def get_tables(base_id) -> tuple:
     """
     user_id = g.current_user_id
     
-    # 检查权限
-    if not BaseService.check_permission(str(base_id), user_id, MemberRole.VIEWER):
+    # 检查权限：Base 成员按原有逻辑放行；纯表分享用户仅能看到通过表分享可访问的表格
+    base_permission = BaseService.check_permission(str(base_id), user_id, MemberRole.VIEWER)
+    if not base_permission and not TableShareService.is_share_only_user(str(base_id), user_id):
         return forbidden_response('no_permission_access_base')
     
     tables = TableService.get_all_tables(str(base_id))
+    
+    # 非成员但命中表分享：过滤出分享可访问的表格
+    if not base_permission:
+        shared_table_ids = set(TableShareService.get_shared_table_ids(str(base_id), user_id))
+        tables = [table for table in tables if str(table.id) in shared_table_ids]
     
     # 转换为字典列表
     tables_data = [table.to_dict(include_stats=True) for table in tables]

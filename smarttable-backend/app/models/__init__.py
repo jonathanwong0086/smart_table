@@ -4,6 +4,7 @@
 from app.models.user import User, TokenBlocklist
 from app.models.base import Base, BaseMember, MemberRole
 from app.models.base_share import BaseShare, SharePermission
+from app.models.table_share import TableShare, TableShareMember, TableSharePermission
 from app.models.table import Table
 from app.models.table_folder import TableFolder
 from app.models.field import Field
@@ -76,6 +77,9 @@ __all__ = [
     'MemberRole',
     'BaseShare',
     'SharePermission',
+    'TableShare',
+    'TableShareMember',
+    'TableSharePermission',
     'Table',
     'TableFolder',
     'Field',

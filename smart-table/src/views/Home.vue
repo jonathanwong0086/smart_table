@@ -4,9 +4,11 @@ import { useI18n } from "vue-i18n";
 import { useBaseStore } from "@/stores";
 import { useAuthStore } from "@/stores/authStore";
 import { useShareStore } from "@/stores/shareStore";
+import { useTableShareStore } from "@/stores/tableShareStore";
 import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { Base } from "@/api/types";
+import type { TableShareMembership } from "@/services/api/shareApiService";
 import { getTableTemplates, type TableTemplate } from "@/utils/tableTemplates";
 import { templateService } from "@/db/services";
 import { copyBase } from "@/services/api/baseApiService";
@@ -21,6 +23,7 @@ const { t, locale } = useI18n();
 const baseStore = useBaseStore();
 const authStore = useAuthStore();
 const shareStore = useShareStore();
+const tableShareStore = useTableShareStore();
 const createFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
 
@@ -44,6 +47,12 @@ const sharedWithMeBases = ref<Base[]>([]);
 const sharedByMeShares = ref<any[]>([]);
 // 分享相关加载状态
 const sharingLoading = ref(false);
+
+// 分享给我的数据表列表（通过表分享链接加入）
+const sharedWithMeTables = ref<TableShareMembership[]>([]);
+// 数据表分享信息弹窗
+const shareInfoVisible = ref(false);
+const shareInfoItem = ref<TableShareMembership | null>(null);
 
 // 加载状态
 const templateLoadingMap = ref<Map<string, boolean>>(new Map());
@@ -227,9 +236,32 @@ const allBases = computed(() => {
 // 是否有收藏的项目
 const hasStarredBases = computed(() => starredBases.value.length > 0);
 
+// 分享给我的数据表条目（搜索过滤 + 按表格更新时间倒序，与现有列表排序规则一致）
+const sharedTableItems = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  return sharedWithMeTables.value
+    .filter((item) => {
+      if (!query) return true;
+      return (
+        item.table.name.toLowerCase().includes(query) ||
+        item.base.name.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) =>
+      String(b.table.updated_at || "").localeCompare(String(a.table.updated_at || "")),
+    );
+});
+
+// 首页分区展示的分享表格卡片（最多8个，与收藏分区一致）
+const displayedSharedTableItems = computed(() => sharedTableItems.value.slice(0, 8));
+
 // 是否有搜索结果
 const hasSearchResults = computed(() => {
-  return starredBases.value.length > 0 || allBases.value.length > 0;
+  return (
+    starredBases.value.length > 0 ||
+    allBases.value.length > 0 ||
+    sharedTableItems.value.length > 0
+  );
 });
 
 // 过滤后的模板列表（仅按名称搜索，按当前语言加载对应模板集）
@@ -323,6 +355,8 @@ const handleSearchQueryChange = (event: Event) => {
 
 onMounted(async () => {
   await baseStore.fetchBases();
+  // 加载「分享给我的」数据表列表（失败不阻塞首页渲染）
+  loadSharedWithMeTables();
 
   // 监听来自 AppHeader 的搜索事件
   window.addEventListener("home-search-query-change", handleSearchQueryChange as EventListener);
@@ -357,12 +391,67 @@ async function loadSharedByMe() {
   }
 }
 
+// 加载分享给我的数据表列表（通过表分享链接加入的）
+async function loadSharedWithMeTables() {
+  try {
+    sharedWithMeTables.value = await tableShareStore.fetchSharedWithMeTables();
+  } catch (error) {
+    console.error("加载分享给我的数据表失败:", error);
+  }
+}
+
 // 监听导航变化，加载对应数据
 watch(currentNav, (newNav) => {
   if (newNav === "shares") {
     loadSharedWithMe();
     loadSharedByMe();
+    loadSharedWithMeTables();
   }
+});
+
+/** 表分享权限 → 标签颜色 */
+function sharedPermissionTagType(permission: string) {
+  return permission === "editor" ? "warning" : "info";
+}
+
+/** 表分享权限 → 显示文案（复用表分享弹窗的权限词条） */
+function sharedPermissionLabel(permission: string) {
+  if (permission === "editor") return t("view.share.tableShare.permissionEditor");
+  if (permission === "commenter") return t("view.share.tableShare.permissionCommenter");
+  return t("view.share.tableShare.permissionViewer");
+}
+
+// 打开已加入的分享表格：写入受限模式标记后进入 Base 页（复用 Base 页的表分享恢复链路，
+// 登录态下会自动 join 并选中对应表格）
+function openSharedTable(item: TableShareMembership) {
+  localStorage.setItem(
+    `table_share_permission_${item.base.id}`,
+    JSON.stringify({
+      share_token: item.share_token,
+      table_id: item.table.id,
+      base_id: item.base.id,
+    })
+  );
+  goToBase(item.base.id);
+}
+
+// 查看数据表分享信息
+function showShareInfo(item: TableShareMembership) {
+  shareInfoItem.value = item;
+  shareInfoVisible.value = true;
+}
+
+// 「分享给我的」页签合并条目：Base 分享条目在前（保持原有展示），数据表分享条目在后（按更新时间倒序）
+const sharedWithMeEntries = computed(() => [
+  ...sharedWithMeBases.value.map((base) => ({ type: "base" as const, base })),
+  ...sharedTableItems.value.map((item) => ({ type: "table" as const, item })),
+]);
+
+// 「分享给我的」页签分页数据
+const paginatedSharedWithMeEntries = computed(() => {
+  const start = (sharedWithMeCurrentPage.value - 1) * sharedWithMePageSize.value;
+  const end = start + sharedWithMePageSize.value;
+  return sharedWithMeEntries.value.slice(start, end);
 });
 
 // 格式化日期（用于分享视图）
@@ -783,8 +872,10 @@ async function handleCopyBase(base: Base, event: Event) {
         style="overflow: auto; height: calc(100vh - 100px)">
         <!-- 首页视图 -->
         <div v-if="currentNav === 'home'" class="home-view">
-          <!-- 空状态 -->
-          <div v-if="baseStore.bases.length === 0" class="empty-state">
+          <!-- 空状态（无任何 Base 且无分享给我的数据表时展示） -->
+          <div
+            v-if="baseStore.bases.length === 0 && sharedTableItems.length === 0"
+            class="empty-state">
             <div class="empty-illustration">
               <svg viewBox="0 0 200 200" fill="none">
                 <rect
@@ -1038,6 +1129,64 @@ async function handleCopyBase(base: Base, event: Event) {
                           </el-dropdown-menu>
                         </template>
                       </el-dropdown>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 分享给我的表格分区（通过表分享链接加入的数据表，与 Base 条目并列展示） -->
+            <section v-if="sharedTableItems.length > 0" class="section shared-tables-section">
+              <div class="section-header">
+                <div class="section-title">
+                  <div class="title-icon all-icon">
+                    <el-icon><Connection /></el-icon>
+                  </div>
+                  <h2>{{ t('base.sharedTablesSection') }}</h2>
+                  <span class="count-badge gray">{{ sharedTableItems.length }}</span>
+                </div>
+              </div>
+
+              <div class="card-grid">
+                <div
+                  v-for="item in displayedSharedTableItems"
+                  :key="item.share_id"
+                  class="base-card"
+                  @click="openSharedTable(item)">
+                  <div class="card-main">
+                    <div
+                      class="card-icon"
+                      :style="{ backgroundColor: item.base.color || '#3B82F6' }">
+                      {{ item.base.icon || "📊" }}
+                    </div>
+                    <div class="card-info">
+                      <h3
+                        class="card-name"
+                        v-html="highlightText(item.table.name, searchQuery)" />
+                      <p class="card-desc">
+                        {{ t('base.sharedFromBase', { name: item.base.name }) }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="card-footer">
+                    <el-tag
+                      :type="sharedPermissionTagType(item.permission)"
+                      size="small">
+                      {{ sharedPermissionLabel(item.permission) }}
+                    </el-tag>
+                    <div class="card-actions" @click.stop="stopPropagation">
+                      <el-tooltip
+                        :content="t('base.shareInfo')"
+                        placement="top"
+                        :show-after="200">
+                        <el-button
+                          link
+                          type="info"
+                          :title="t('base.shareInfo')"
+                          @click="showShareInfo(item)">
+                          <el-icon><InfoFilled /></el-icon>
+                        </el-button>
+                      </el-tooltip>
                     </div>
                   </div>
                 </div>
@@ -1376,7 +1525,7 @@ async function handleCopyBase(base: Base, event: Event) {
                 @click="shareActiveTab = 'shared-with-me'">
                 <el-icon><Connection /></el-icon>
                 <span>{{ t('base.sharedWithMe') }}</span>
-                <span class="tab-count">{{ sharedWithMeBases.length }}</span>
+                <span class="tab-count">{{ sharedWithMeEntries.length }}</span>
               </div>
             </div>
 
@@ -1496,7 +1645,7 @@ async function handleCopyBase(base: Base, event: Event) {
 
               <!-- 分享给我的页签 -->
               <div v-else class="tab-panel">
-                <div v-if="sharedWithMeBases.length === 0" class="empty-state">
+                <div v-if="sharedWithMeEntries.length === 0" class="empty-state">
                   <el-icon :size="48" class="empty-icon"
                     ><Connection
                   /></el-icon>
@@ -1505,53 +1654,97 @@ async function handleCopyBase(base: Base, event: Event) {
                 </div>
                 <div v-else class="table-list-container">
                   <div class="table-list">
-                    <div
-                      v-for="base in sharedWithMeBases"
-                      :key="base.id"
-                      class="table-list-item"
-                      @click="goToBase(base.id)">
+                    <template v-for="entry in paginatedSharedWithMeEntries" :key="entry.type === 'base' ? entry.base.id : entry.item.share_id">
+                      <!-- Base 分享条目 -->
                       <div
-                        class="item-icon"
-                        :style="{ backgroundColor: base.color || '#3B82F6' }">
-                        {{ base.icon || "📊" }}
+                        v-if="entry.type === 'base'"
+                        class="table-list-item"
+                        @click="goToBase(entry.base.id)">
+                        <div
+                          class="item-icon"
+                          :style="{ backgroundColor: entry.base.color || '#3B82F6' }">
+                          {{ entry.base.icon || "📊" }}
+                        </div>
+                        <div class="item-info">
+                          <h4 class="item-name">{{ entry.base.name }}</h4>
+                          <p class="item-desc">
+                            {{ entry.base.description || t('base.noDescription') }}
+                          </p>
+                        </div>
+                        <div class="item-meta">
+                          <span class="update-time">
+                            {{ t('base.modifiedAt') }} {{ formatRelativeTime(entry.base.updated_at) }}
+                          </span>
+                        </div>
+                        <div class="item-actions" @click.stop>
+                          <el-tooltip
+                            :content="entry.base.is_starred ? t('base.unstar') : t('base.star')"
+                            placement="top"
+                            :show-after="200">
+                            <el-button
+                              link
+                              :type="entry.base.is_starred ? 'warning' : 'info'"
+                              class="action-btn"
+                              :loading="isUnstarLoading(entry.base.id)"
+                              @click="handleToggleStar(entry.base, $event)">
+                              <el-icon>
+                                <StarFilled v-if="entry.base.is_starred" />
+                                <Star v-else />
+                              </el-icon>
+                            </el-button>
+                          </el-tooltip>
+                        </div>
                       </div>
-                      <div class="item-info">
-                        <h4 class="item-name">{{ base.name }}</h4>
-                        <p class="item-desc">
-                          {{ base.description || t('base.noDescription') }}
-                        </p>
+
+                      <!-- 数据表分享条目 -->
+                      <div
+                        v-else
+                        class="table-list-item"
+                        @click="openSharedTable(entry.item)">
+                        <div
+                          class="item-icon"
+                          :style="{ backgroundColor: entry.item.base.color || '#3B82F6' }">
+                          {{ entry.item.base.icon || "📊" }}
+                        </div>
+                        <div class="item-info">
+                          <h4 class="item-name">{{ entry.item.table.name }}</h4>
+                          <p class="item-desc">
+                            {{ t('base.sharedFromBase', { name: entry.item.base.name }) }}
+                          </p>
+                        </div>
+                        <div class="item-meta">
+                          <el-tag
+                            :type="sharedPermissionTagType(entry.item.permission)"
+                            size="small">
+                            {{ sharedPermissionLabel(entry.item.permission) }}
+                          </el-tag>
+                          <span class="update-time">
+                            {{ t('base.joinedAt') }} {{ formatShareDate(entry.item.joined_at || "") }}
+                          </span>
+                        </div>
+                        <div class="item-actions" @click.stop>
+                          <el-tooltip
+                            :content="t('base.shareInfo')"
+                            placement="top"
+                            :show-after="200">
+                            <el-button
+                              link
+                              type="info"
+                              class="action-btn"
+                              @click="showShareInfo(entry.item)">
+                              <el-icon><InfoFilled /></el-icon>
+                            </el-button>
+                          </el-tooltip>
+                        </div>
                       </div>
-                      <div class="item-meta">
-                        <span class="update-time">
-                          {{ t('base.modifiedAt') }} {{ formatRelativeTime(base.updated_at) }}
-                        </span>
-                      </div>
-                      <div class="item-actions" @click.stop>
-                        <el-tooltip
-                          :content="base.is_starred ? t('base.unstar') : t('base.star')"
-                          placement="top"
-                          :show-after="200">
-                          <el-button
-                            link
-                            :type="base.is_starred ? 'warning' : 'info'"
-                            class="action-btn"
-                            :loading="isUnstarLoading(base.id)"
-                            @click="handleToggleStar(base, $event)">
-                            <el-icon>
-                              <StarFilled v-if="base.is_starred" />
-                              <Star v-else />
-                            </el-icon>
-                          </el-button>
-                        </el-tooltip>
-                      </div>
-                    </div>
+                    </template>
                   </div>
 
                   <!-- 分页 -->
                   <div class="pagination-container">
                     <div class="pagination-left">
                       <span class="pagination-total"
-                        >{{ t('base.paginationTotal', { total: sharedWithMeBases.length }) }}</span
+                        >{{ t('base.paginationTotal', { total: sharedWithMeEntries.length }) }}</span
                       >
                       <el-select
                         v-model="sharedWithMePageSize"
@@ -1566,7 +1759,7 @@ async function handleCopyBase(base: Base, event: Event) {
                     <el-pagination
                       v-model:current-page="sharedWithMeCurrentPage"
                       v-model:page-size="sharedWithMePageSize"
-                      :total="sharedWithMeBases.length"
+                      :total="sharedWithMeEntries.length"
                       :page-sizes="[10, 20, 50, 100]"
                       layout="prev, pager, next, jumper"
                       background
@@ -1759,6 +1952,50 @@ async function handleCopyBase(base: Base, event: Event) {
       @confirm="handlePreviewConfirm"
       @close="closePreview"
     />
+
+    <!-- 数据表分享信息对话框 -->
+    <el-dialog
+      v-model="shareInfoVisible"
+      :title="t('base.shareInfo')"
+      width="420px"
+      append-to-body>
+      <div v-if="shareInfoItem" class="share-info-panel">
+        <div class="share-info-row">
+          <span class="share-info-label">{{ t('base.shareInfoTable') }}</span>
+          <span class="share-info-value">{{ shareInfoItem.table.name }}</span>
+        </div>
+        <div class="share-info-row">
+          <span class="share-info-label">{{ t('base.shareInfoBase') }}</span>
+          <span class="share-info-value">{{ shareInfoItem.base.name }}</span>
+        </div>
+        <div class="share-info-row">
+          <span class="share-info-label">{{ t('base.shareInfoPermission') }}</span>
+          <span class="share-info-value">
+            <el-tag
+              :type="sharedPermissionTagType(shareInfoItem.permission)"
+              size="small">
+              {{ sharedPermissionLabel(shareInfoItem.permission) }}
+            </el-tag>
+          </span>
+        </div>
+        <div class="share-info-row">
+          <span class="share-info-label">{{ t('base.shareInfoViewScope') }}</span>
+          <span class="share-info-value">
+            {{
+              shareInfoItem.view_scope === 'all'
+                ? t('base.viewScopeAll')
+                : t('base.viewScopeSpecified', { count: shareInfoItem.view_count ?? 0 })
+            }}
+          </span>
+        </div>
+        <div class="share-info-row">
+          <span class="share-info-label">{{ t('base.shareInfoJoinedAt') }}</span>
+          <span class="share-info-value">
+            {{ shareInfoItem.joined_at ? formatDateTime(shareInfoItem.joined_at) : '-' }}
+          </span>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -3486,6 +3723,32 @@ $star-color: #f59e0b;
     to {
       transform: rotate(360deg);
     }
+  }
+}
+
+// 数据表分享信息弹窗（append-to-body，样式置于顶层）
+.share-info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .share-info-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .share-info-label {
+    width: 96px;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: #909399;
+  }
+
+  .share-info-value {
+    font-size: 14px;
+    color: #303133;
+    word-break: break-all;
   }
 }
 </style>

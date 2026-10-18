@@ -6,6 +6,8 @@ import { useBaseStore } from "@/stores";
 import { useViewStore } from "@/stores/viewStore";
 import { useTableStore } from "@/stores/tableStore";
 import { useMemberStore } from "@/stores/memberStore";
+import { useTableShareStore } from "@/stores/tableShareStore";
+import { useAuthStore } from "@/stores/authStore";
 import {
   Setting,
   Share,
@@ -42,6 +44,7 @@ import ImportDialog from "@/components/dialogs/ImportDialog.vue";
 import ExcelImportCreateDialog from "@/components/dialogs/ExcelImportCreateDialog.vue";
 import MemberManagementDialog from "@/components/dialogs/MemberManagementDialog.vue";
 import BaseShareDialog from "@/components/dialogs/BaseShareDialog.vue";
+import TableShareDialog from "@/components/dialogs/TableShareDialog.vue";
 import { ViewType } from "@/types";
 import { FieldType } from "@/types/fields";
 import { linkApiService } from "@/services/api/linkApiService";
@@ -78,6 +81,8 @@ const baseStore = useBaseStore();
 const viewStore = useViewStore();
 const tableStore = useTableStore();
 const memberStore = useMemberStore();
+const tableShareStore = useTableShareStore();
+const authStore = useAuthStore();
 const collaborationStore = useCollaborationStore();
 const userCacheStore = useUserCacheStore();
 const documentStore = useDocumentStore();
@@ -124,6 +129,8 @@ const isDashboardView = computed(() => route.path.includes('/dashboard/'));
 // 权限控制计算属性
 const canEdit = computed(() => memberStore.canEdit);
 const canManage = computed(() => memberStore.canManage);
+// 数据表分享受限模式（非 Base 成员通过表分享链接访问）
+const isTableShareRestricted = computed(() => memberStore.isTableShareRestricted);
 // 使用 tableStore.fields 计算可见字段，确保状态同步
 const visibleFields = computed(() => {
   const fields = tableStore.fields;
@@ -161,6 +168,9 @@ const showMemberManagement = ref(false);
 
 // Base 分享对话框显示状态
 const showBaseShare = ref(false);
+
+// 数据表分享对话框显示状态
+const showTableShare = ref(false);
 
 // 创建仪表盘表单数据
 const createDashboardForm = reactive({
@@ -428,53 +438,125 @@ const tableListRef = ref<HTMLElement | null>(null);
 let sortableInstance: Sortable | null = null;
 let isInitializing = false; // 防止初始化期间重复请求
 
+// 数据表分享受限模式处理：
+// 解析 localStorage 中的 table_share_permission_{baseId}，登录态下调用 join：
+// - restricted=true：记录 shareRole 进入受限模式（保留 localStorage 供刷新后重新 join）
+// - restricted=false：已是 Base 正式成员，清除标记按正常模式加载
+// - join 失败（token 失效等）：清除标记正常加载，后续数据 403 自然兜底
+// 返回被分享的表 ID（供加载表格后自动选中）
+async function resolveTableShareAccess(currentBaseId: string): Promise<string | null> {
+  const raw = localStorage.getItem(`table_share_permission_${currentBaseId}`);
+  if (!raw) {
+    // 常规进入 Base（无表分享标记）：清理可能残留的受限状态（切换 Base / 切换账号场景）
+    memberStore.setShareRole(null);
+    return null;
+  }
+
+  let shareToken: string | null = null;
+  let sharedTableId: string | null = null;
+  try {
+    const info = JSON.parse(raw);
+    if (info && typeof info.share_token === "string") {
+      shareToken = info.share_token;
+    }
+    if (info && typeof info.table_id === "string") {
+      sharedTableId = info.table_id;
+    }
+  } catch {
+    localStorage.removeItem(`table_share_permission_${currentBaseId}`);
+    return null;
+  }
+
+  if (!shareToken) {
+    localStorage.removeItem(`table_share_permission_${currentBaseId}`);
+    return null;
+  }
+
+  // join 需登录；未登录时由路由守卫跳转登录页，登录回来后再处理
+  if (!authStore.isAuthenticated) return sharedTableId;
+
+  try {
+    const result = await tableShareStore.joinShare(shareToken);
+    if (result.restricted) {
+      memberStore.setShareRole(result.role);
+    } else {
+      localStorage.removeItem(`table_share_permission_${currentBaseId}`);
+      memberStore.setShareRole(null);
+    }
+  } catch (e) {
+    localStorage.removeItem(`table_share_permission_${currentBaseId}`);
+    memberStore.setShareRole(null);
+    console.warn("[Base] table share join failed:", e);
+  }
+  return sharedTableId;
+}
+
 onMounted(async () => {
   initDayjsPlugins();
   const currentBaseId = route.params.id as string;
   if (currentBaseId) {
     isInitializing = true;
     try {
-      const shareInfo = localStorage.getItem(`share_permission_${currentBaseId}`);
-      if (shareInfo) {
+      // 先处理表分享 join（仅登录态），再走原有 Base 分享/fetchBase 流程
+      const sharedTableId = await resolveTableShareAccess(currentBaseId);
+
+      if (isTableShareRestricted.value) {
+        // 表分享受限用户（非 Base 成员）：Base 详情/成员/文件夹接口必然 403，
+        // 直接跳过这些调用，避免全局拦截器弹出无意义的权限错误提示
+        await tableStore.loadTables(currentBaseId);
+      } else {
+        const shareInfo = localStorage.getItem(`share_permission_${currentBaseId}`);
         try {
-          const info = JSON.parse(shareInfo);
-          if (info && info.share_token && typeof info.share_token === "string") {
-            await baseStore.fetchBase(currentBaseId, info.share_token);
+          if (shareInfo) {
+            try {
+              const info = JSON.parse(shareInfo);
+              if (info && info.share_token && typeof info.share_token === "string") {
+                await baseStore.fetchBase(currentBaseId, info.share_token);
+              } else {
+                localStorage.removeItem(`share_permission_${currentBaseId}`);
+                await baseStore.fetchBase(currentBaseId);
+              }
+            } catch (e) {
+              localStorage.removeItem(`share_permission_${currentBaseId}`);
+              await baseStore.fetchBase(currentBaseId);
+            }
           } else {
-            localStorage.removeItem(`share_permission_${currentBaseId}`);
             await baseStore.fetchBase(currentBaseId);
           }
         } catch (e) {
-          localStorage.removeItem(`share_permission_${currentBaseId}`);
-          await baseStore.fetchBase(currentBaseId);
+          // Base 详情加载失败不阻塞后续表格/视图加载，页面头部信息按缺失处理
+          console.warn("[Base] fetchBase failed:", e);
         }
-      } else {
-        await baseStore.fetchBase(currentBaseId);
+        try {
+          const members = await memberStore.fetchMembers(currentBaseId);
+          // 将成员信息缓存到 userCacheStore
+          // 注意：BaseMember 中的用户信息在 user 对象中
+          if (members && members.length > 0) {
+            userCacheStore.cacheUsers(
+              members.map(m => ({
+                id: m.user_id,
+                name: (m.user as any)?.name || (m.user as any)?.email || '',
+                email: (m.user as any)?.email || '',
+                avatar: (m.user as any)?.avatar,
+                role: m.role,
+              }))
+            );
+          }
+        } catch (e) {
+          // 成员列表加载失败不阻塞，忽略
+          console.warn("[Base] fetchMembers failed:", e);
+        }
+
+        // 加载表格和文档列表
+        await tableStore.loadTables(currentBaseId);
+        await tableStore.loadFolders(currentBaseId);
+        await documentStore.fetchDocuments(currentBaseId);
       }
-      const members = await memberStore.fetchMembers(currentBaseId);
-      // 将成员信息缓存到 userCacheStore
-      // 注意：BaseMember 中的用户信息在 user 对象中
-      if (members && members.length > 0) {
-        userCacheStore.cacheUsers(
-          members.map(m => ({
-            id: m.user_id,
-            name: (m.user as any)?.name || (m.user as any)?.email || '',
-            email: (m.user as any)?.email || '',
-            avatar: (m.user as any)?.avatar,
-            role: m.role,
-          }))
-        );
-      }
-      
-      // 加载表格和文档列表
-      await tableStore.loadTables(currentBaseId);
-      await tableStore.loadFolders(currentBaseId);
-      await documentStore.fetchDocuments(currentBaseId);
-      
+
       // 初始加载：直接检查路由参数并加载对应内容
       const targetDocId = route.params.docId as string | undefined;
       const targetTableId = route.params.tableId as string | undefined;
-      
+
       if (targetDocId) {
         // 如果在文档路由，直接加载文档详情
         try {
@@ -492,6 +574,12 @@ onMounted(async () => {
           // 回退到第一个表格
           await loadTableView(tableStore.tables[0].id);
         }
+      } else if (
+        sharedTableId &&
+        tableStore.tables.some(t => t.id === sharedTableId)
+      ) {
+        // 受限模式：自动选中被分享的表
+        await handleTableSelect(sharedTableId);
       } else if (tableStore.tables.length > 0 && !tableStore.currentTable) {
         // 默认选择第一个表格
         await loadTableView(tableStore.tables[0].id);
@@ -526,6 +614,13 @@ onUnmounted(() => {
 const handleOpenBaseShare = () => {
   if (canManage.value) {
     showBaseShare.value = true;
+  }
+};
+
+// 处理打开数据表分享对话框（ViewSwitcher 分享按钮，按钮自身已按 canManage 显隐）
+const handleOpenTableShare = () => {
+  if (canManage.value && tableStore.currentTable) {
+    showTableShare.value = true;
   }
 };
 
@@ -2118,8 +2213,8 @@ const handleDocumentExportPdf = async () => {
       :current-table-id="tableStore.currentTable?.id"
       :current-document-id="currentDocumentId"
       :show-tables="true"
-      :show-dashboards="true"
-      :show-documents="true"
+      :show-dashboards="!isTableShareRestricted"
+      :show-documents="!isTableShareRestricted"
       :can-manage="canManage"
       @select-table="handleTableSelect"
       @select-dashboard="handleDashboardClick"
@@ -2182,8 +2277,9 @@ const handleDocumentExportPdf = async () => {
         <div class="table-container">
           <ViewSwitcher
             :table-id="currentTableId"
-            :readonly="!canEdit"
-            @view-change="handleViewChange" />
+            :readonly="!canEdit || isTableShareRestricted"
+            @view-change="handleViewChange"
+            @open-share="handleOpenTableShare" />
 
           <header
             class="table-header"
@@ -2924,6 +3020,12 @@ const handleDocumentExportPdf = async () => {
       v-model:visible="showBaseShare"
       :base-id="baseStore.currentBase?.id || ''"
       @share-changed="handleShareChanged" />
+
+    <!-- 数据表分享对话框 -->
+    <TableShareDialog
+      v-model:visible="showTableShare"
+      :table-id="tableStore.currentTable?.id || ''"
+      :table-name="tableStore.currentTable?.name" />
 
     <!-- 重命名仪表盘对话框 -->
     <el-dialog

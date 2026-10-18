@@ -26,6 +26,10 @@ export const useMemberStore = defineStore("member", () => {
 
   const currentBaseOwnerId = ref<string | null>(null);
 
+  // 数据表分享受限模式：非 Base 成员通过表分享链接访问时的临时角色
+  const shareRole = ref<string | null>(null);
+  const shareRestricted = ref(false);
+
   const currentUserRole = computed(() => {
     const authStore = useAuthStore();
     const currentUserId = authStore.user?.id;
@@ -36,7 +40,8 @@ export const useMemberStore = defineStore("member", () => {
     }
 
     const member = members.value.find((m) => m.user_id === currentUserId);
-    return member?.role || null;
+    // 成员列表查不到（受限用户）时回退到表分享角色
+    return member?.role || shareRole.value || null;
   });
 
   const canEdit = computed(() => {
@@ -57,6 +62,14 @@ export const useMemberStore = defineStore("member", () => {
   const isOwner = computed(() => {
     return currentUserRole.value === "owner";
   });
+
+  // 数据表分享受限模式（非 Base 成员、仅通过表分享链接访问）
+  const isTableShareRestricted = computed(() => shareRestricted.value);
+
+  function setShareRole(role: string | null) {
+    shareRole.value = role;
+    shareRestricted.value = role !== null;
+  }
 
   function setCurrentBaseOwner(ownerId: string | null) {
     currentBaseOwnerId.value = ownerId;
@@ -185,6 +198,8 @@ export const useMemberStore = defineStore("member", () => {
   function clearMembers() {
     members.value = [];
     currentBaseOwnerId.value = null;
+    shareRole.value = null;
+    shareRestricted.value = false;
   }
 
   function clearError() {
@@ -196,6 +211,8 @@ export const useMemberStore = defineStore("member", () => {
     loading.value = false;
     error.value = null;
     currentBaseOwnerId.value = null;
+    shareRole.value = null;
+    shareRestricted.value = false;
   }
 
   return {
@@ -207,6 +224,10 @@ export const useMemberStore = defineStore("member", () => {
     canView,
     canManage,
     isOwner,
+    shareRole,
+    shareRestricted,
+    isTableShareRestricted,
+    setShareRole,
     setCurrentBaseOwner,
     fetchMembers,
     addMember,

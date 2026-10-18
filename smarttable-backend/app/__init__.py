@@ -20,6 +20,7 @@ from app.routes.attachments import attachments_bp
 from app.routes.import_export import import_export_bp
 from app.routes.admin import admin_bp
 from app.routes.shares import shares_bp
+from app.routes.table_shares import table_shares_bp
 from app.routes.form_shares import form_shares_bp
 from app.routes.auth_captcha import auth_captcha_bp
 from app.routes.email import email_bp
@@ -269,6 +270,9 @@ def register_blueprints(app):
 
     # 注册分享蓝图
     app.register_blueprint(shares_bp, url_prefix='/api')
+
+    # 注册数据表分享蓝图 (路由中已包含完整路径)
+    app.register_blueprint(table_shares_bp, url_prefix='/api')
 
     # 注册表单分享蓝图 (路由中已包含完整路径)
     app.register_blueprint(form_shares_bp, url_prefix='/api')

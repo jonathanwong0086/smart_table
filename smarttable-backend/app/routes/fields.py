@@ -9,6 +9,8 @@ from app.i18n import translate
 from app.services.field_service import FieldService
 from app.services.table_service import TableService
 from app.services.link_service import LinkService
+from app.services.permission_service import PermissionService
+from app.services.table_share_service import TableShareService
 from app.models.base import MemberRole
 from app.models.field import Field, FieldType
 from app.utils.decorators import authenticate, jwt_required, form_share_or_jwt
@@ -19,6 +21,26 @@ from app.utils.response import (
 fields_bp = Blueprint('fields', __name__)
 # 禁用严格斜杠，允许带或不带斜杠的URL
 fields_bp.strict_slashes = False
+
+
+def _forbid_share_user_manage_fields(table_id=None, field_id=None) -> tuple | None:
+    """
+    纯表分享用户（不在 base_members 中但命中表分享角色）禁止管理字段（即使 editor 角色）
+    """
+    user_id = g.current_user_id
+    if field_id is not None:
+        field = FieldService.get_field(str(field_id))
+        if not field:
+            return None
+        table_id = field.table_id
+    if table_id is None:
+        return None
+    if TableShareService.get_members_role(str(table_id), user_id) is None:
+        return None
+    table = TableService.get_table_by_id(str(table_id))
+    if table and not PermissionService.check_permission(str(table.base_id), user_id, MemberRole.VIEWER):
+        return forbidden_response('no_permission_manage_fields')
+    return None
 
 
 @fields_bp.route('/tables/<uuid:table_id>/fields', methods=['GET'])
@@ -102,6 +124,11 @@ def create_field(table_id) -> tuple:
     """
     user_id = g.current_user_id
 
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(table_id=table_id)
+    if blocked:
+        return blocked
+
     # 检查权限（需要 ADMIN 或更高权限）
     if not TableService.check_permission(str(table_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_create_field_table')
@@ -159,7 +186,9 @@ def get_field(field_id) -> tuple:
     user_id = g.current_user_id
     
     # 检查权限
-    if not FieldService.check_permission(str(field_id), user_id, MemberRole.VIEWER):
+    # 权限检查（Base 成员或表分享用户均可读）
+    if not FieldService.check_permission(str(field_id), user_id, MemberRole.VIEWER) \
+            and TableShareService.get_members_role_by_field(str(field_id), user_id) is None:
         return forbidden_response('no_permission_access_field')
     
     field = FieldService.get_field(str(field_id))
@@ -226,10 +255,15 @@ def update_field(field_id) -> tuple:
     """
     user_id = g.current_user_id
 
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(field_id=field_id)
+    if blocked:
+        return blocked
+
     # 检查权限（需要 ADMIN 或更高权限）
     if not FieldService.check_permission(str(field_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_modify_field')
-    
+
     data = request.get_json() or {}
     
     # 验证名称长度
@@ -343,6 +377,11 @@ def delete_field(field_id) -> tuple:
     """
     user_id = g.current_user_id
 
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(field_id=field_id)
+    if blocked:
+        return blocked
+
     # 检查权限（需要 ADMIN 或更高权限）
     if not FieldService.check_permission(str(field_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_delete_field')
@@ -414,6 +453,11 @@ def reorder_fields() -> tuple:
     if not field_orders:
         return error_response('provide_sort_data', code=400)
     
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(table_id=table_id)
+    if blocked:
+        return blocked
+
     # 检查权限（需要 ADMIN 或更高权限）
     if not TableService.check_permission(str(table_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_modify_table')
@@ -459,6 +503,11 @@ def duplicate_field(field_id) -> tuple:
         description: 字段不存在
     """
     user_id = g.current_user_id
+
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(field_id=field_id)
+    if blocked:
+        return blocked
 
     # 检查权限（需要 ADMIN 或更高权限）
     if not FieldService.check_permission(str(field_id), user_id, MemberRole.ADMIN):
@@ -573,7 +622,9 @@ def validate_field_value(field_id) -> tuple:
     user_id = g.current_user_id
     
     # 检查权限
-    if not FieldService.check_permission(str(field_id), user_id, MemberRole.VIEWER):
+    # 权限检查（Base 成员或表分享用户均可读）
+    if not FieldService.check_permission(str(field_id), user_id, MemberRole.VIEWER) \
+            and TableShareService.get_members_role_by_field(str(field_id), user_id) is None:
         return forbidden_response('no_permission_access_field')
     
     field = FieldService.get_field(str(field_id))
@@ -731,6 +782,11 @@ def update_link_field(field_id) -> tuple:
     """
     user_id = g.current_user_id
 
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(field_id=field_id)
+    if blocked:
+        return blocked
+
     # 检查权限
     if not FieldService.check_permission(str(field_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_modify_field')
@@ -826,6 +882,11 @@ def delete_link_field(field_id) -> tuple:
     """
     user_id = g.current_user_id
 
+    # 纯表分享用户禁止管理字段
+    blocked = _forbid_share_user_manage_fields(field_id=field_id)
+    if blocked:
+        return blocked
+
     # 检查权限
     if not FieldService.check_permission(str(field_id), user_id, MemberRole.ADMIN):
         return forbidden_response('do_not_permission_delete_field')
@@ -881,7 +942,9 @@ def get_table_link_relations(table_id) -> tuple:
     user_id = g.current_user_id
     
     # 检查权限
-    if not TableService.check_permission(str(table_id), user_id, MemberRole.VIEWER):
+    # 权限检查（Base 成员或表分享用户均可读）
+    if not TableService.check_permission(str(table_id), user_id, MemberRole.VIEWER) \
+            and TableShareService.get_members_role(str(table_id), user_id) is None:
         return forbidden_response('no_permission_access_table_2')
     
     try:

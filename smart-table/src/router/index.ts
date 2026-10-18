@@ -144,6 +144,16 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: "/share/table/:token",
+    name: "TableShare",
+    component: () => import("@/views/TableShare.vue"),
+    meta: {
+      title: "route.tableShare",
+      public: true,
+      layout: "blank",
+    },
+  },
+  {
     path: "/share/:token",
     name: "BaseShare",
     component: () => import("@/views/BaseShare.vue"),

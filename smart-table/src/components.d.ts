@@ -195,6 +195,7 @@ declare module 'vue' {
     TableHeader: typeof import('./components/views/TableView/TableHeader.vue')['default']
     TableHistoryDialog: typeof import('./components/dialogs/TableHistoryDialog.vue')['default']
     TableRow: typeof import('./components/views/TableView/TableRow.vue')['default']
+    TableShareDialog: typeof import('./components/dialogs/TableShareDialog.vue')['default']
     TableView: typeof import('./components/views/TableView/TableView.vue')['default']
     TemplatePreviewDialog: typeof import('./components/templates/TemplatePreviewDialog.vue')['default']
     TemplateRefHint: typeof import('./components/workflow/TemplateRefHint.vue')['default']

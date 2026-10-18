@@ -2482,6 +2482,10 @@ MESSAGES = {
         'zh-CN': '获取分享给您的 Base 成功',
         'en-US': 'Fetched bases shared with you successfully',
     },
+    'fetched_table_shares_shared_successfully': {
+        'zh-CN': '获取分享给您的数据表成功',
+        'en-US': 'Fetched tables shared with you successfully',
+    },
     'fetched_share_link_list_successfully': {
         'zh-CN': '获取分享链接列表成功',
         'en-US': 'Fetched share link list successfully',
@@ -3133,6 +3137,42 @@ MESSAGES = {
     'expiry_time_valid_unix_timestamp': {
         'zh-CN': '过期时间必须是有效的 Unix 时间戳',
         'en-US': 'The expiry time must be a valid Unix timestamp',
+    },
+    'invalid_share_permission': {
+        'zh-CN': '分享权限不合法（仅支持 editor/commenter/viewer）',
+        'en-US': 'Invalid share permission (only editor/commenter/viewer are supported)',
+    },
+    'invalid_view_selection': {
+        'zh-CN': '可见视图范围选择不合法',
+        'en-US': 'Invalid visible view selection',
+    },
+    'joined_table_successfully': {
+        'zh-CN': '已成功加入该数据表',
+        'en-US': 'Successfully joined the table',
+    },
+    'fetched_share_member_list_successfully': {
+        'zh-CN': '获取分享成员列表成功',
+        'en-US': 'Successfully fetched share member list',
+    },
+    'table_share_member_removed_successfully': {
+        'zh-CN': '已将该用户移出分享',
+        'en-US': 'Member removed from table share',
+    },
+    'table_share_member_does_not_exist': {
+        'zh-CN': '该用户不在此分享的成员列表中',
+        'en-US': 'User is not a member of this table share',
+    },
+    'table_share_member_cannot_remove_yourself': {
+        'zh-CN': '不能移除自己',
+        'en-US': 'You cannot remove yourself',
+    },
+    'no_permission_manage_views': {
+        'zh-CN': '无权管理该表格的视图',
+        'en-US': 'No permission to manage views of this table',
+    },
+    'no_permission_manage_fields': {
+        'zh-CN': '无权管理该表格的字段',
+        'en-US': 'No permission to manage fields of this table',
     },
     'filter_value_field_belong_current_table': {
         'zh-CN': '过滤条件值字段必须属于当前表',

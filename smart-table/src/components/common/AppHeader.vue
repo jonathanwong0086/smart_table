@@ -163,6 +163,9 @@ const canManage = computed(() => {
   return memberStore.canManage;
 });
 
+// 数据表分享受限模式：隐藏工作流等非表格入口
+const isTableShareRestricted = computed(() => memberStore.isTableShareRestricted);
+
 // 是否在Base页面
 const isBasePage = computed(() => {
   return route.path.startsWith("/base/");
@@ -431,8 +434,8 @@ onMounted(() => {
         <el-divider direction="vertical" class="header-divider" />
       </template>
 
-      <!-- Base页面的自动化下拉菜单（工作流配置界面已在该界面内，无需再显示入口按钮） -->
-      <template v-if="isBasePage && currentBase && !isWorkflowPage">
+      <!-- Base页面的自动化下拉菜单（工作流配置界面已在该界面内，无需再显示入口按钮；表分享受限用户隐藏） -->
+      <template v-if="isBasePage && currentBase && !isWorkflowPage && !isTableShareRestricted">
         <el-dropdown trigger="click" @command="(cmd: string) => {
           if (cmd === 'workflow') handleWorkflowClick();
         }">

@@ -2,6 +2,7 @@
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useViewStore } from "@/stores/viewStore";
+import { useMemberStore } from "@/stores/memberStore";
 import { ViewType, type ViewTypeValue } from "@/types";
 
 const { t } = useI18n();
@@ -18,9 +19,11 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: "view-change", viewId: string): void;
   (e: "view-create", type: ViewTypeValue): void;
+  (e: "open-share"): void;
 }>();
 
 const viewStore = useViewStore();
+const memberStore = useMemberStore();
 
 const showCreateMenu = ref(false);
 const newViewName = ref("");
@@ -372,6 +375,26 @@ function getViewLabel(type: string): string {
         </el-dropdown-menu>
       </template>
     </el-dropdown>
+
+    <!-- 分享当前数据表（仅拥有管理权限时显示） -->
+    <button
+      v-if="!readonly && memberStore.canManage"
+      class="add-view-btn share-table-btn"
+      @click="emit('open-share')">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        width="14"
+        height="14">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+      </svg>
+      <span>{{ t('view.share.tableShare.title') }}</span>
+    </button>
 
     <el-dialog
       v-model="showCreateMenu"

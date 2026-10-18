@@ -12,14 +12,28 @@ from app.services.table_service import TableService
 from app.services.record_service import RecordService
 from app.services.link_service import LinkService
 from app.services.field_service import FieldService
+from app.services.permission_service import PermissionService
+from app.services.table_share_service import TableShareService
 from app.models.field import Field, FieldType
 from app.models.view import View
-from app.utils.response import success_response, error_response
+from app.models.base import MemberRole
+from app.utils.response import success_response, error_response, forbidden_response
 from app.utils.decorators import jwt_required, role_required
 
 views_bp = Blueprint('views', __name__)
 # 禁用严格斜杠，允许带或不带斜杠的URL
 views_bp.strict_slashes = False
+
+
+def _forbid_share_user_manage_views(table) -> tuple | None:
+    """纯表分享用户（不在 base_members 中但命中表分享角色）禁止管理视图"""
+    user_id = g.current_user_id
+    if table is None:
+        return None
+    if not PermissionService.check_permission(str(table.base_id), user_id, MemberRole.VIEWER) \
+            and TableShareService.get_members_role(str(table.id), user_id):
+        return forbidden_response('no_permission_manage_views')
+    return None
 
 
 class ViewCreateSchema(Schema):
@@ -99,7 +113,15 @@ def get_views(table_id) -> tuple:
     table = TableService.get_table_by_id(table_id)
     if not table:
         return error_response('table_does_not_exist', 404)
-    
+
+    # 权限检查：Base 成员按原有逻辑放行；纯表分享用户放行并按可见范围过滤视图
+    user_id = g.current_user_id
+    if not PermissionService.check_permission(str(table.base_id), user_id, MemberRole.VIEWER):
+        accessible_views = TableShareService.get_accessible_views(str(table_id), user_id)
+        if accessible_views is None:
+            return error_response('no_permission_access_table', 403)
+        return success_response([view.to_dict() for view in accessible_views])
+
     try:
         views = ViewService.get_table_views(table_id)
         return success_response([view.to_dict() for view in views])
@@ -170,12 +192,17 @@ def create_view(table_id) -> tuple:
     table = TableService.get_table_by_id(table_id)
     if not table:
         return error_response('table_does_not_exist', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(table)
+    if blocked:
+        return blocked
+
     # 验证请求数据
     json_data = request.get_json()
     if not json_data:
         return error_response('request_data_empty', 400)
-    
+
     errors = view_create_schema.validate(json_data)
     if errors:
         return error_response('data_validation_failed', 400, errors)
@@ -347,12 +374,17 @@ def update_view(view_id) -> tuple:
     view = ViewService.get_view_by_id(view_id)
     if not view:
         return error_response('view_does_not_exist', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(view.table)
+    if blocked:
+        return blocked
+
     # 验证请求数据
     json_data = request.get_json()
     if not json_data:
         return error_response('request_data_empty', 400)
-    
+
     errors = view_update_schema.validate(json_data)
     if errors:
         return error_response('data_validation_failed', 400, errors)
@@ -421,10 +453,17 @@ def delete_view(view_id) -> tuple:
     view = ViewService.get_view_by_id(view_id)
     if not view:
         return error_response('view_does_not_exist', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(view.table)
+    if blocked:
+        return blocked
+
     try:
         success = ViewService.delete_view(view)
         if success:
+            # 视图删除后清理各表分享可见范围中对它的引用
+            TableShareService.remove_view_from_shares(str(view.table_id), str(view_id))
             return success_response(None, 'view_deleted_successfully')
         else:
             return error_response('default_view_deleted', 400)
@@ -472,7 +511,12 @@ def duplicate_view(view_id) -> tuple:
     view = ViewService.get_view_by_id(view_id)
     if not view:
         return error_response('view_does_not_exist', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(view.table)
+    if blocked:
+        return blocked
+
     # 验证请求数据
     json_data = request.get_json() or {}
     errors = view_duplicate_schema.validate(json_data)
@@ -542,7 +586,12 @@ def reorder_views(table_id) -> tuple:
     table = TableService.get_table_by_id(table_id)
     if not table:
         return error_response('table_does_not_exist', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(table)
+    if blocked:
+        return blocked
+
     json_data = request.get_json()
     if not json_data or 'view_orders' not in json_data:
         return error_response('view_orders_empty', 400)
@@ -606,11 +655,16 @@ def set_default_view(table_id, view_id) -> tuple:
     table = TableService.get_table_by_id(table_id)
     if not table:
         return error_response('table_does_not_exist', 404)
-    
+
     view = ViewService.get_view_by_id(view_id)
     if not view or str(view.table_id) != table_id:
         return error_response('view_does_not_exist_does_not_belong_table', 404)
-    
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(table)
+    if blocked:
+        return blocked
+
     try:
         
         View.query.filter_by(table_id=table_id).update({'is_default': False})
@@ -794,6 +848,11 @@ def auto_create_parent_field(view_id) -> tuple:
     view = ViewService.get_view_by_id(view_id)
     if not view:
         return error_response('view_does_not_exist', 404)
+
+    # 纯表分享用户禁止管理视图
+    blocked = _forbid_share_user_manage_views(view.table)
+    if blocked:
+        return blocked
 
     table_id = str(view.table_id)
 

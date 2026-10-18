@@ -8,6 +8,7 @@
  */
 import { ref, computed } from "vue";
 import { fetchPlugins } from "@/api/plugins";
+import { useMemberStore } from "@/stores/memberStore";
 import type {
   PluginEntity,
   ExtensionPoint,
@@ -51,6 +52,9 @@ let loadHomeInFlight: Promise<void> | null = null;
  */
 export async function loadPluginsForBase(baseId: string): Promise<void> {
   if (!baseId) return;
+  // 表分享受限用户（非 Base 成员）屏蔽 Base 级插件：插件接口要求 Base 成员身份，
+  // 调用必然 403（连带全局拦截器弹权限错误提示），受限模式下不提供插件功能
+  if (useMemberStore().isTableShareRestricted) return;
   if (loadedBaseId.value === baseId) return;
   if (loadInFlight) return loadInFlight;
   setLoading(true);

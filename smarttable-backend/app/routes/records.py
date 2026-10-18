@@ -16,6 +16,7 @@ from app.services.formula_service import FormulaService
 from app.services.link_service import LinkService
 from app.services.field_service import FieldService
 from app.services.permission_service import PermissionService
+from app.services.table_share_service import TableShareService
 from app.schemas.record_schema import (
     record_create_schema,
     record_update_schema,
@@ -81,12 +82,12 @@ def get_records(table_id) -> tuple:
     if not table:
         return error_response('table_does_not_exist', 404)
     
-    # 资源级权限检查
+    # 资源级权限检查（Base 成员或表分享用户均可读）
     if not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.VIEWER
-    ):
+    ) and not TableShareService.get_members_role(str(table_id), g.current_user_id):
         return error_response('no_permission_access_table', 403)
-    
+
     # 获取分页参数
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -217,10 +218,10 @@ def create_record(table_id) -> tuple:
     if not table:
         return error_response('table_does_not_exist', 404)
     
-    # 资源级权限检查
+    # 资源级权限检查（Base 成员需 ≥EDITOR；表分享用户仅 editor 角色可写）
     if not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.EDITOR
-    ):
+    ) and TableShareService.get_members_role(str(table_id), g.current_user_id) != 'editor':
         return error_response('no_permission_create_records_table', 403)
     
     # 验证请求数据
@@ -304,10 +305,10 @@ def batch_create_records(table_id) -> tuple:
     if not table:
         return error_response('table_does_not_exist', 404)
 
-    # 资源级权限检查
+    # 资源级权限检查（Base 成员需 ≥EDITOR；表分享用户仅 editor 角色可写）
     if not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.EDITOR
-    ):
+    ) and TableShareService.get_members_role(str(table_id), g.current_user_id) != 'editor':
         return error_response('no_permission_create_records_table', 403)
 
     # 验证请求数据
@@ -472,11 +473,11 @@ def get_record(record_id) -> tuple:
     if not record:
         return error_response('record_does_not_exist', 404)
     
-    # 资源级权限检查
+    # 资源级权限检查（Base 成员或表分享用户均可读）
     table = TableService.get_table_by_id(record.table_id)
     if table and not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.VIEWER
-    ):
+    ) and not TableShareService.get_members_role(str(record.table_id), g.current_user_id):
         return error_response('no_permission_access_record', 403)
     
     try:
@@ -546,11 +547,11 @@ def update_record(record_id) -> tuple:
     if not record:
         return error_response('record_does_not_exist', 404)
     
-    # 资源级权限检查
+    # 资源级权限检查（Base 成员需 ≥EDITOR；表分享用户仅 editor 角色可写）
     table = TableService.get_table_by_id(record.table_id)
     if table and not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.EDITOR
-    ):
+    ) and TableShareService.get_members_role(str(record.table_id), g.current_user_id) != 'editor':
         return error_response('no_permission_modify_record', 403)
     
     # 验证请求数据
@@ -636,18 +637,18 @@ def batch_update_records() -> tuple:
     if len(record_ids) > 1000:
         return error_response('batch_update_more_than_records_time', 400)
     
-    # 收集所有记录的 base_id 并进行权限检查
-    base_ids_checked = set()
+    # 收集所有记录的 table_id 并进行权限检查（按表去重：表分享权限按表判定，不能按 base 合并）
+    table_ids_checked = set()
     for record_id in record_ids:
         record = RecordService.get_record_by_id(record_id)
         if record:
             table = TableService.get_table_by_id(record.table_id)
-            if table and str(table.base_id) not in base_ids_checked:
+            if table and str(table.id) not in table_ids_checked:
                 if not PermissionService.check_permission(
                     str(table.base_id), g.current_user_id, MemberRole.EDITOR
-                ):
+                ) and TableShareService.get_members_role(str(table.id), g.current_user_id) != 'editor':
                     return error_response(translate('no_permission_modify_records_in_table', table.base_id), 403)
-                base_ids_checked.add(str(table.base_id))
+                table_ids_checked.add(str(table.id))
     
     try:
         updated_count = 0
@@ -712,7 +713,7 @@ def delete_record(record_id) -> tuple:
     table = TableService.get_table_by_id(record.table_id)
     if table and not PermissionService.check_permission(
         str(table.base_id), g.current_user_id, MemberRole.EDITOR
-    ):
+    ) and TableShareService.get_members_role(str(record.table_id), g.current_user_id) != 'editor':
         return error_response('no_permission_delete_record', 403)
     
     try:
@@ -776,18 +777,18 @@ def batch_delete_records() -> tuple:
     if len(record_ids) > 1000:
         return error_response('batch_delete_more_than_records_time', 400)
     
-    # 收集所有记录的 base_id 并进行权限检查
-    base_ids_checked = set()
+    # 收集所有记录的 table_id 并进行权限检查（按表去重：表分享权限按表判定，不能按 base 合并）
+    table_ids_checked = set()
     for record_id in record_ids:
         record = RecordService.get_record_by_id(record_id)
         if record:
             table = TableService.get_table_by_id(record.table_id)
-            if table and str(table.base_id) not in base_ids_checked:
+            if table and str(table.id) not in table_ids_checked:
                 if not PermissionService.check_permission(
                     str(table.base_id), g.current_user_id, MemberRole.EDITOR
-                ):
+                ) and TableShareService.get_members_role(str(table.id), g.current_user_id) != 'editor':
                     return error_response(translate('no_permission_delete_records_in_table', table.base_id), 403)
-                base_ids_checked.add(str(table.base_id))
+                table_ids_checked.add(str(table.id))
     
     try:
         deleted_count = 0
@@ -1770,7 +1771,7 @@ def create_child_record(record_id) -> tuple:
         table = TableService.get_table_by_id(table_id)
         if table and not PermissionService.check_permission(
             str(table.base_id), g.current_user_id, MemberRole.EDITOR
-        ):
+        ) and TableShareService.get_members_role(str(table_id), g.current_user_id) != 'editor':
             return error_response('no_permission_create_records_table', 403)
 
         # 创建新记录

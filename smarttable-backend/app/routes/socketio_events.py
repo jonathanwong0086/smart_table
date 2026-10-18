@@ -9,6 +9,7 @@ from flask_jwt_extended import decode_token
 from app.extensions import socketio as socketio_ext
 from app.services.collaboration_service import CollaborationService
 from app.services.permission_service import PermissionService
+from app.services.table_share_service import TableShareService
 from app.models.base import MemberRole
 
 
@@ -127,7 +128,9 @@ def register_socketio_handlers(socketio, app):
         if not base_id:
             emit('error', {'message': 'base_id is required'})
             return
-        if not PermissionService.check_permission(base_id, user_id, MemberRole.VIEWER):
+        # Base 成员或通过表分享可访问该 Base 的用户均可加入房间
+        if not PermissionService.check_permission(base_id, user_id, MemberRole.VIEWER) \
+                and not TableShareService.get_shared_table_ids(str(base_id), user_id):
             emit('error', {'message': 'Permission denied'})
             return
         try:

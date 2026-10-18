@@ -225,8 +225,11 @@ def form_share_or_jwt(table_param: str = 'table_id', require_role: Optional[List
                         return forbidden_response('insufficient_permissions_perform_operation')
                 else:
                     from app.services.table_service import TableService
+                    from app.services.table_share_service import TableShareService
                     from app.models.base import MemberRole
-                    if not TableService.check_permission(str(table_id), user_id, MemberRole.VIEWER):
+                    # Base 成员按原有逻辑校验；纯表分享用户命中该表的分享角色时放行（仅限被授权的表）
+                    if not TableService.check_permission(str(table_id), user_id, MemberRole.VIEWER) \
+                            and TableShareService.get_members_role(str(table_id), user_id) is None:
                         return forbidden_response('no_permission_access_table_2')
                 return fn(*args, **kwargs)
 
